@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus RAG</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+    <!-- Phosphor Icons (Clean, Apple-like icons) -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Markdown Parser -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', 'Inter', 'Segoe UI', 'Roboto', 'sans-serif'],
+                    },
+                    colors: {
+                        ios: {
+                            bg: '#000000',
+                            surface: '#1c1c1e',
+                            blue: '#0A84FF',
+                            gray: '#8E8E93',
+                            separator: '#38383A'
+                        }
+                    },
+                    animation: {
+                        'blob': 'blob 7s infinite',
+                        'fade-in-up': 'fadeInUp 0.5s ease-out forwards',
+                    },
+                    keyframes: {
+                        blob: {
+                            '0%': { transform: 'translate(0px, 0px) scale(1)' },
+                            '33%': { transform: 'translate(30px, -50px) scale(1.1)' },
+                            '66%': { transform: 'translate(-20px, 20px) scale(0.9)' },
+                            '100%': { transform: 'translate(0px, 0px) scale(1)' },
+                        },
+                        fadeInUp: {
+                            '0%': { opacity: '0', transform: 'translateY(10px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <style>
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #38383A; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+        /* Glass Utilities */
+        .glass-panel {
+            background: rgba(28, 28, 30, 0.6);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-input {
+            background: rgba(44, 44, 46, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Loader */
+        .typing-dot {
+            animation: typing 1.4s infinite ease-in-out both;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* Markdown Styles */
+        .prose p { margin-bottom: 0.75em; line-height: 1.6; }
+        .prose ul { list-style-type: disc; padding-left: 1.2em; margin-bottom: 0.75em; }
+        .prose strong { color: #fff; font-weight: 600; }
+        .prose code { background: rgba(255,255,255,0.1); padding: 0.2em 0.4em; border-radius: 4px; font-size: 0.9em; }
+    </style>
+</head>
+<body class="bg-ios-bg text-white font-sans antialiased h-screen overflow-hidden selection:bg-ios-blue selection:text-white">
+
+    <div id="app" class="h-full flex flex-col relative">
+        
+        <!-- Ambient Background Mesh -->
+        <div class="fixed inset-0 z-0 pointer-events-none opacity-30">
+            <div class="absolute top-0 left-1/4 w-96 h-96 bg-blue-900 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob"></div>
+            <div class="absolute top-0 right-1/4 w-96 h-96 bg-purple-900 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-2000"></div>
+            <div class="absolute -bottom-32 left-1/3 w-96 h-96 bg-indigo-900 rounded-full mix-blend-multiply filter blur-3xl opacity-70 animate-blob animation-delay-4000"></div>
+        </div>
+
+        <!-- Header -->
+        <header class="z-10 flex items-center justify-between px-6 py-4 glass-panel border-b-0 border-b-ios-separator/30 sticky top-0">
+            <div class="flex items-center gap-3">
+                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                <span class="ml-4 text-sm font-medium tracking-wide text-gray-300 opacity-80">NEXUS RAG / GEMINI 004</span>
+            </div>
+            
+            <!-- Upload Status / Button -->
+            <div>
+                <label 
+                    for="file-upload" 
+                    class="cursor-pointer group relative flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 hover:bg-white/10 transition-all duration-300 border border-white/5 hover:border-white/10 overflow-hidden"
+                    :class="{'pointer-events-none opacity-50': isProcessing}"
+                >
+                    <div v-if="isProcessing" class="absolute inset-0 bg-ios-blue/20 animate-pulse"></div>
+                    
+                    <i v-if="!isProcessing && !isIndexed" class="ph ph-upload-simple text-lg text-ios-blue"></i>
+                    <i v-if="isProcessing" class="ph ph-spinner animate-spin text-lg text-ios-blue"></i>
+                    <i v-if="isIndexed" class="ph ph-check-circle text-lg text-green-400"></i>
+
+                    <span class="text-xs font-medium tracking-wide">
+                        {{ uploadButtonText }}
+                    </span>
+                    <input id="file-upload" type="file" class="hidden" accept="application/pdf" @change="handleFileUpload">
+                </label>
+            </div>
+        </header>
+
+        <!-- Main Chat Area -->
+        <main class="flex-1 z-10 overflow-y-auto p-6 scroll-smooth" id="chat-container">
+            
+            <!-- Empty State -->
+            <div v-if="messages.length === 0" class="h-full flex flex-col items-center justify-center text-center opacity-0 animate-[fadeInUp_0.8s_ease-out_forwards]">
+                <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-[0_0_40px_rgba(10,132,255,0.3)] mb-6">
+                    <i class="ph ph-sparkle text-4xl text-white"></i>
+                </div>
+                <h1 class="text-3xl font-semibold tracking-tight mb-2">Knowledge Engine</h1>
+                <p class="text-ios-gray text-sm max-w-md">Upload a document to activate contextual retrieval.</p>
+            </div>
+
+            <!-- Messages -->
+            <div v-else class="max-w-3xl mx-auto space-y-8 pb-24">
+                <div v-for="(msg, index) in messages" :key="index" class="animate-fade-in-up" :style="{ animationDelay: `${index * 0.1}s` }">
+                    
+                    <!-- User Message -->
+                    <div v-if="msg.role === 'user'" class="flex justify-end">
+                        <div class="bg-ios-blue text-white px-5 py-3 rounded-2xl rounded-tr-sm max-w-[80%] shadow-lg text-[15px] leading-relaxed">
+                            {{ msg.content }}
+                        </div>
+                    </div>
+
+                    <!-- AI Message -->
+                    <div v-else class="flex items-start gap-4">
+                        <div class="w-8 h-8 rounded-full bg-gradient-to-tr from-gray-700 to-gray-600 flex items-center justify-center flex-shrink-0 border border-white/10 shadow-inner">
+                            <i class="ph ph-sparkle text-white/80 text-xs"></i>
+                        </div>
+                        <div class="flex-1 space-y-2">
+                            <div class="glass-panel px-6 py-5 rounded-2xl rounded-tl-sm text-gray-200 text-[15px] shadow-xl border-white/5">
+                                <div class="prose prose-invert max-w-none" v-html="parseMarkdown(msg.content)"></div>
+                            </div>
+                            
+                            <!-- Sources (Optional Expandable) -->
+                            <div v-if="msg.sources" class="ml-2">
+                                <button class="text-xs text-ios-gray hover:text-white transition-colors flex items-center gap-1">
+                                    <i class="ph ph-files"></i> Viewed {{ msg.sources.length }} Context Chunks
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Loading Indicator -->
+                <div v-if="isThinking" class="flex items-start gap-4 animate-fade-in-up">
+                    <div class="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center flex-shrink-0 border border-white/10">
+                        <i class="ph ph-aperture animate-spin-slow text-white/50 text-xs"></i>
+                    </div>
+                    <div class="glass-panel px-4 py-3 rounded-2xl rounded-tl-sm flex items-center gap-1 w-20 h-12">
+                        <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                        <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Input Area -->
+        <footer class="z-20 p-6 pt-0 bg-gradient-to-t from-black via-black to-transparent">
+            <div class="max-w-3xl mx-auto relative">
+                <form @submit.prevent="sendMessage" class="relative group">
+                    <input 
+                        v-model="newMessage" 
+                        type="text" 
+                        placeholder="Ask about your document..." 
+                        class="w-full glass-input text-white placeholder-gray-500 px-6 py-4 pr-16 rounded-full focus:outline-none focus:ring-2 focus:ring-ios-blue/50 focus:border-ios-blue/50 transition-all shadow-2xl text-[15px]"
+                        :disabled="isThinking || !isIndexed"
+                    >
+                    <button 
+                        type="submit"
+                        :disabled="!newMessage.trim() || isThinking"
+                        class="absolute right-2 top-2 bottom-2 w-10 h-10 bg-ios-blue rounded-full flex items-center justify-center hover:bg-blue-500 transition-all disabled:opacity-0 disabled:scale-75"
+                    >
+                        <i class="ph ph-arrow-up text-white font-bold text-lg"></i>
+                    </button>
+                </form>
+                <div class="text-center mt-3 text-[11px] text-gray-600 font-medium tracking-wider">
+                    AI GENERATED CONTENT • CHECK SOURCES
+                </div>
+            </div>
+        </footer>
+
+    </div>
+
+    <script>
+        const { createApp, ref, computed, nextTick } = Vue;
+
+        createApp({
+            setup() {
+                const messages = ref([]);
+                const newMessage = ref('');
+                const isThinking = ref(false);
+                const isProcessing = ref(false); // File uploading/indexing
+                const isIndexed = ref(false);
+
+                // UI Text Logic
+                const uploadButtonText = computed(() => {
+                    if (isProcessing.value) return 'Indexing Context...';
+                    if (isIndexed.value) return 'Ready';
+                    return 'Upload PDF';
+                });
+
+                // Markdown Parser
+                const parseMarkdown = (text) => {
+                    return marked.parse(text);
+                };
+
+                // Auto Scroll
+                const scrollToBottom = async () => {
+                    await nextTick();
+                    const container = document.getElementById('chat-container');
+                    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+                };
+
+                // Handle File Upload
+                const handleFileUpload = async (event) => {
+                    const file = event.target.files[0];
+                    if (!file) return;
+
+                    isProcessing.value = true;
+                    
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    try {
+                        const response = await fetch('/api/upload', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const data = await response.json();
+
+                        if (data.status === 'success') {
+                            isIndexed.value = true;
+                            // Add a system message
+                            messages.value.push({
+                                role: 'assistant',
+                                content: `**${file.name}** has been indexed. I've generated contextual embeddings and run the reranker setup. What would you like to know?`
+                            });
+                        } else {
+                            alert('Error: ' + data.detail);
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        alert('Upload failed.');
+                    } finally {
+                        isProcessing.value = false;
+                    }
+                };
+
+                // Handle Chat
+                const sendMessage = async () => {
+                    if (!newMessage.value.trim()) return;
+
+                    const text = newMessage.value;
+                    newMessage.value = '';
+                    
+                    // Add User Message
+                    messages.value.push({ role: 'user', content: text });
+                    scrollToBottom();
+                    
+                    isThinking.value = true;
+
+                    try {
+                        const response = await fetch('/api/chat', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ text: text })
+                        });
+                        
+                        const data = await response.json();
+                        
+                        if (data.error) {
+                            messages.value.push({ role: 'assistant', content: `Error: ${data.error}` });
+                        } else {
+                            messages.value.push({ role: 'assistant', content: data.answer });
+                        }
+                    } catch (e) {
+                        messages.value.push({ role: 'assistant', content: "Connection error." });
+                    } finally {
+                        isThinking.value = false;
+                        scrollToBottom();
+                    }
+                };
+
+                return {
+                    messages,
+                    newMessage,
+                    isThinking,
+                    isProcessing,
+                    isIndexed,
+                    uploadButtonText,
+                    handleFileUpload,
+                    sendMessage,
+                    parseMarkdown
+                }
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
