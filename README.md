@@ -1,4 +1,4 @@
-# 🎓 Collaborative RAG Learning Platform
+# Collaborative RAG Learning Platform
 
 > A state-of-the-art Retrieval-Augmented Generation (RAG) system designed for college students to collaboratively learn, share insights, and build knowledge together.
 
@@ -9,11 +9,11 @@
 
 ---
 
-## 📖 Overview
+## Overview
 
 This project is an experimental platform that combines cutting-edge RAG technology with social collaboration features to enhance the learning experience for college students. Instead of studying in isolation, students can create shared spaces for each course, collaborate on understanding complex materials, and learn from each other's questions and insights.
 
-### 🎯 Vision
+### Vision
 
 Build a collaborative learning environment where:
 - **Each course has its own dedicated workspace** (notebook/space)
@@ -25,24 +25,24 @@ Build a collaborative learning environment where:
 
 ---
 
-## ✨ Current Features
+## Current Features
 
 ### Advanced RAG Pipeline
-- **🔍 Hybrid Retrieval**: Combines FAISS vector search with BM25 keyword search for optimal document retrieval
-- **🎯 Cross-Encoder Reranking**: Uses `BAAI/bge-reranker-base` for precision ranking
-- **🧠 Contextual Embeddings**: Leverages Google's Gemini 2.5 Flash to generate context-aware chunk embeddings
-- **📊 Source Attribution**: Returns the source document with each answer for transparency
-- **⚡ High Performance**: Optimized for speed with Gemini 2.5 Flash LLM
+- **Hybrid Retrieval**: Combines FAISS vector search with BM25 keyword search for optimal document retrieval
+- **Cross-Encoder Reranking**: Uses `BAAI/bge-reranker-base` for precision ranking
+- **Contextual Embeddings**: Leverages Google's Gemini 2.5 Flash to generate context-aware chunk embeddings
+- **Source Attribution**: Returns the source document with each answer for transparency
+- **High Performance**: Optimized for speed with Gemini 2.5 Flash LLM
 
 ### Web Interface
-- **🌐 FastAPI Backend**: RESTful API for document upload and query processing
-- **📤 PDF Upload**: Simple document ingestion pipeline
-- **💬 Chat Interface**: Interactive question-answering system
-- **📱 Modern UI**: Clean, responsive web interface
+- **FastAPI Backend**: RESTful API for document upload and query processing
+- **PDF Upload**: Simple document ingestion pipeline
+- **Chat Interface**: Interactive question-answering system
+- **Modern UI**: Clean, responsive web interface
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -55,17 +55,17 @@ Build a collaborative learning environment where:
 │                  Advanced RAG System                         │
 │                  (advanced_rag.py)                           │
 │                                                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐     │
-│  │   Document   │  │   Hybrid     │  │  Cross-      │     │
-│  │  Processing  │─▶│  Retrieval   │─▶│  Encoder     │     │
-│  │              │  │ (FAISS+BM25) │  │  Reranking   │     │
-│  └──────────────┘  └──────────────┘  └──────────────┘     │
-│         │                                      │            │
-│         ▼                                      ▼            │
-│  ┌──────────────┐                    ┌──────────────┐     │
-│  │ Contextual   │                    │   Gemini     │     │
-│  │ Embeddings   │                    │   LLM        │     │
-│  └──────────────┘                    └──────────────┘     │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐        │
+│  │   Document   │  │   Hybrid     │  │  Cross-      │        │
+│  │  Processing  │─▶│  Retrieval   │─▶│  Encoder     │       │
+│  │              │  │ (FAISS+BM25) │  │  Reranking   │        │
+│  └──────────────┘  └──────────────┘  └──────────────┘        │
+│         │                                      │             │
+│         ▼                                      ▼             │
+│  ┌──────────────┐                    ┌──────────────┐        │
+│  │ Contextual   │                    │   Gemini     │        │
+│  │ Embeddings   │                    │   LLM        │        │
+│  └──────────────┘                    └──────────────┘        │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -81,7 +81,7 @@ Build a collaborative learning environment where:
 
 ---
 
-## 🚀 Getting Started
+## Getting Started
 
 ### Prerequisites
 - Python 3.11 or higher
@@ -132,7 +132,7 @@ Build a collaborative learning environment where:
 
 ---
 
-## 💻 Usage
+## Usage
 
 ### Web Interface
 1. Navigate to `http://localhost:8000` in your browser
@@ -198,7 +198,7 @@ print(f"Source: {result['source_document']}")
 
 ---
 
-## 🔬 RAG System Details
+## RAG System Details
 
 ### Document Processing Pipeline
 
@@ -229,7 +229,7 @@ TOP_K_RERANK = 5      # Final docs sent to LLM
 
 ---
 
-## 🗺️ Roadmap
+## Roadmap
 
 ### Phase 1: Core RAG (Current)
 - [x] Advanced hybrid retrieval pipeline
@@ -268,7 +268,7 @@ TOP_K_RERANK = 5      # Final docs sent to LLM
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 This is currently an experimental project. Contributions, ideas, and feedback are welcome!
 
@@ -281,7 +281,7 @@ This is currently an experimental project. Contributions, ideas, and feedback ar
 
 ---
 
-## 📋 Project Structure
+## Project Structure
 
 ```
 PythonProject2/
@@ -295,7 +295,7 @@ PythonProject2/
 
 ---
 
-## ⚙️ Configuration & Environment
+## Configuration & Environment
 
 ### Required Environment Variables
 - `GOOGLE_API_KEY`: Your Google API key for Gemini access
@@ -309,7 +309,7 @@ Modify constants in `advanced_rag.py` to tune performance:
 
 ---
 
-## 🐛 Known Issues & Limitations
+## Known Issues & Limitations
 
 - **Single User**: Currently supports only one user at a time
 - **In-Memory Storage**: Vector store is not persisted between sessions
@@ -319,7 +319,7 @@ Modify constants in `advanced_rag.py` to tune performance:
 
 ---
 
-## 📊 Performance
+## Performance
 
 - **PDF Processing**: ~2-5 seconds for typical lecture notes (10-20 pages)
 - **Query Response**: ~2-4 seconds including retrieval and generation
@@ -328,13 +328,13 @@ Modify constants in `advanced_rag.py` to tune performance:
 
 ---
 
-## 📝 License
+## License
 
 This project is currently unlicensed. License information will be added as the project matures.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Built with [LangChain](https://www.langchain.com/) for RAG orchestration
 - Powered by [Google Gemini](https://ai.google.dev/) for LLM capabilities
@@ -343,7 +343,7 @@ This project is currently unlicensed. License information will be added as the p
 
 ---
 
-## 📧 Contact
+## Contact
 
 For questions, suggestions, or collaboration opportunities, please open an issue on GitHub.
 
