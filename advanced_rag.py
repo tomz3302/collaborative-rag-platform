@@ -6,7 +6,7 @@ from operator import itemgetter
 
 # --- Libraries ---
 import numpy as np
-from docling.document_converter import DocumentConverter
+#from docling.document_converter import DocumentConverter
 from langchain_classic.retrievers import ContextualCompressionRetriever
 from langchain_community.document_loaders import PyPDFLoader
 # LangChain & Graph
@@ -220,7 +220,7 @@ class AdvancedRAGSystem:
             ("human", "{question}")
         ])
 
-        chain = prompt | self.llm | StrOutputParser()
+        chain = prompt | self.llm | StrxOutputParser()
 
         response_text = chain.invoke({
             "context": context_text,
