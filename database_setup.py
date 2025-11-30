@@ -59,19 +59,14 @@ TABLES['threads'] = (
 )
 
 # 3. CONTEXT ANCHORS TABLE (The "Split Screen" Logic)
-# Links a Thread to a specific Document and Page Number.
+# Links a Thread to a specific Document.
 TABLES['context_anchors'] = (
     """
     CREATE TABLE IF NOT EXISTS context_anchors (
         id INT AUTO_INCREMENT PRIMARY KEY,
         thread_id INT NOT NULL,
         document_id INT NOT NULL,
-        page_number INT NOT NULL,
-
-        -- MySQL does not have a native "JSONB" equivalent, use JSON
-        snippet_coords JSON, 
-
-        UNIQUE KEY unique_anchor (thread_id, document_id, page_number),
+        UNIQUE KEY unique_anchor (thread_id, document_id),
 
         FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE,
         FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
@@ -115,7 +110,7 @@ INDEXES = [
     "CREATE INDEX idx_messages_path ON messages (path(10));",
 
     # Index for fast lookup when a document is opened
-    "CREATE INDEX idx_anchors_doc_page ON context_anchors (document_id, page_number);"
+    "CREATE INDEX idx_anchors_doc ON context_anchors (document_id);"
 ]
 
 

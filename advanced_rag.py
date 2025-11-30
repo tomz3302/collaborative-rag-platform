@@ -1,19 +1,18 @@
 import os
 import sys
-import time
-from typing import List, Tuple, Dict, Any
-from operator import itemgetter
+
+from typing import List, Dict, Any
+
 
 # --- Libraries ---
-import numpy as np
-#from docling.document_converter import DocumentConverter
+
 from langchain_classic.retrievers import ContextualCompressionRetriever
 from langchain_community.document_loaders import PyPDFLoader
 # LangChain & Graph
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 # Google Gemini
@@ -220,7 +219,7 @@ class AdvancedRAGSystem:
             ("human", "{question}")
         ])
 
-        chain = prompt | self.llm | StrxOutputParser()
+        chain = prompt | self.llm | StrOutputParser()
 
         response_text = chain.invoke({
             "context": context_text,
@@ -241,37 +240,3 @@ class AdvancedRAGSystem:
         }
 
 
-# --- Main Execution Flow ---
-if __name__ == "__main__":
-    # Create the pipeline
-    rag_system = AdvancedRAGSystem()
-    
-    # --- INPUT: Define your PDF path here ---
-    # Create a dummy pdf or point to a real one
-    pdf_path = "example_document.pdf" 
-    
-    # Check if file exists for the demo
-    if not os.path.exists(pdf_path):
-        print(f"File {pdf_path} not found. Creating a dummy PDF for demonstration...")
-        from reportlab.pdfgen import canvas
-        c = canvas.Canvas(pdf_path)
-        c.drawString(100, 750, "The Apollo 11 mission landed on the moon in 1969.")
-        c.drawString(100, 730, "Neil Armstrong was the first human to walk on the lunar surface.")
-        c.drawString(100, 710, "The module was named Eagle. The command module was Columbia.")
-        c.drawString(100, 690, "It is estimated that 650 million people watched the landing.")
-        c.save()
-
-    # 1. Ingest
-    docs = rag_system.load_and_process_pdf(pdf_path)
-    
-    # 2. Index
-    rag_system.build_index(docs)
-    
-    # 3. Query Loop
-    while True:
-        q = input("\nAsk a question (or 'q' to quit): ")
-        if q.lower() in ['q', 'quit']:
-            break
-            
-        answer = rag_system.query(q)
-        print("\nAnswer:\n", answer)

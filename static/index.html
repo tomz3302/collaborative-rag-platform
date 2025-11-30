@@ -310,7 +310,7 @@
                         if (data.error) {
                             messages.value.push({ role: 'assistant', content: `Error: ${data.error}` });
                         } else {
-                            messages.value.push({ role: 'assistant', content: data.answer });
+                            messages.value.push({ role: 'assistant', content: data.response });
                         }
                     } catch (e) {
                         messages.value.push({ role: 'assistant', content: "Connection error." });
