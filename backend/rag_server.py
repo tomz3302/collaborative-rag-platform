@@ -23,15 +23,33 @@ logger = logging.getLogger("RAG_Server")
 # --- FastAPI App ---
 app = FastAPI(title="Fluid RAG")
 
-# Setup Persistent Storage for PDFs
-STORAGE_DIR = "storage"
+# Allow frontend (served from same origin) but keep CORS for dev scenarios
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Base repo directory (one level above backend/)
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))
+
+# Setup Persistent Storage for PDFs in repo root
+STORAGE_DIR = os.path.join(BASE_DIR, "storage")
 if not os.path.exists(STORAGE_DIR):
     os.makedirs(STORAGE_DIR)
+
+# Path to frontend build (dist) so backend can serve the static site on port 8000
+FRONTEND_DIST = os.path.join(BASE_DIR, "frontend", "dist")
 
 # Global RAG Instance (In production, use a proper session manager)
 rag_system = AdvancedRAGSystem()
 # Load any existing embeddings
-rag_system.load_existing_embeddings()
+try:
+    rag_system.load_existing_embeddings()
+except Exception:
+    logger.warning("No embeddings loaded or load failed; continue without crashing.")
 
 db_manager = DBManager()
 handler = OmarHandlers(db_manager=db_manager)
@@ -47,10 +65,14 @@ class BranchRequest(BaseModel):
     content: str
     parent_message_id: int
     user_id: int = 1
-@app.get("/", response_class=HTMLResponse)
+
+# Serve the frontend index if available; otherwise return a JSON health response
+@app.get("/")
 async def read_root():
-    with open("static/index.html", "r") as f:
-        return f.read()
+    index_path = os.path.join(FRONTEND_DIST, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path, media_type="text/html")
+    return {"message": "Nexus RAG API Server", "status": "running"}
 
 
 @app.post("/api/upload")
@@ -196,11 +218,17 @@ async def add_message_to_thread(thread_id: int, request: MessageRequest):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-# Create static folder if it doesn't exist (logic handled by manual file creation below)
-if not os.path.exists("static"):
-    os.makedirs("static")
+# Mount frontend static files (this makes the frontend and backend available on the same port)
+if os.path.isdir(FRONTEND_DIST):
+    # Mounting at root will let API routes (/api/...) take precedence and serve files otherwise
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
+else:
+    logger.info(f"Frontend dist not found at {FRONTEND_DIST}. Build the frontend with `npm run build` in the frontend folder to serve it from the backend.")
+
+# NOTE: Do NOT create a local 'static' folder here; frontend build artifacts are expected in frontend/dist
 
 if __name__ == "__main__":
     import uvicorn
-    print("Starting Server on http://localhost:8000")
+    print("Starting Nexus RAG Backend Server on http://localhost:8000")
+    print("If you want the frontend served from the backend, run `npm run build` in the frontend folder first.")
     uvicorn.run(app, host="0.0.0.0", port=8000)

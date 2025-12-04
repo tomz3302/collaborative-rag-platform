@@ -113,6 +113,9 @@ Build a collaborative learning environment where:
    - `pypdf`
    - `numpy`
    - `python-multipart`
+   - `mysql-connector-python`
+   - `sentence-transformers`
+   - `rank_bm25`
 
 3. **Set up environment variables**
    ```bash
