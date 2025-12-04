@@ -3,9 +3,11 @@ import shutil
 import logging
 from typing import Optional
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from chat_controller import ChatController
 
 # Import the RAG system class from the previous step
 # Assuming the previous file was named 'advanced_rag.py'
@@ -21,51 +23,66 @@ logger = logging.getLogger("RAG_Server")
 # --- FastAPI App ---
 app = FastAPI(title="Fluid RAG")
 
+# Setup Persistent Storage for PDFs
+STORAGE_DIR = "storage"
+if not os.path.exists(STORAGE_DIR):
+    os.makedirs(STORAGE_DIR)
+
 # Global RAG Instance (In production, use a proper session manager)
 rag_system = AdvancedRAGSystem()
+# Load any existing embeddings
+rag_system.load_existing_embeddings()
 
 db_manager = DBManager()
-handler = OmarHandlers(db_manager=db_manager, rag_system=rag_system)
-
+handler = OmarHandlers(db_manager=db_manager)
+chat_controller = ChatController(db_manager=db_manager, rag_system=rag_system)
 is_indexed = False
 
 class QueryRequest(BaseModel):
     text: str
     user_id: int = 1       # Default user ID
     thread_id: Optional[int] = None # Optional thread ID
+
+class BranchRequest(BaseModel):
+    content: str
+    parent_message_id: int
+    user_id: int = 1
 @app.get("/", response_class=HTMLResponse)
 async def read_root():
     with open("static/index.html", "r") as f:
         return f.read()
 
+
 @app.post("/api/upload")
 async def upload_file(file: UploadFile = File(...)):
     try:
-        file_location = f"temp_{file.filename}"
+        # Save to PERSISTENT storage, not temp
+        file_location = os.path.join(STORAGE_DIR, file.filename)
+
         with open(file_location, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        logger.info(f"File saved: {file_location}")
+        logger.info(f"File stored at: {file_location}")
 
         # 1. Index document in RAG
         docs = rag_system.load_and_process_pdf(file_location)
         rag_system.build_index(docs)
 
-        # 2. Add document record to Database (Missing piece!)
+        # 2. Add document record to Database
         conn = db_manager.get_connection()
         cursor = conn.cursor()
-        # We store just the filename for now.
-        # Ideally, read the binary data here if you want to store the PDF in DB
-        cursor.execute(
-            "INSERT INTO documents (filename, file_type) VALUES (%s, 'pdf')",
-            (file.filename,)  # Store original filename without 'temp_'
-        )
-        conn.commit()
+
+        # Check if exists to avoid duplicates
+        cursor.execute("SELECT id FROM documents WHERE filename = %s", (file.filename,))
+        if not cursor.fetchone():
+            cursor.execute(
+                "INSERT INTO documents (filename, file_type) VALUES (%s, 'pdf')",
+                (file.filename,)
+            )
+            conn.commit()
+
         cursor.close()
         conn.close()
-
-        # Cleanup
-        os.remove(file_location)
 
         return JSONResponse(content={"status": "success", "message": "Knowledge Base Ready"})
 
@@ -75,22 +92,109 @@ async def upload_file(file: UploadFile = File(...)):
 
 @app.post("/api/chat")
 async def chat(request: QueryRequest):
-    # global is_indexed
-    # if not is_indexed:
-    #     return JSONResponse(content={"answer": "Please upload a document first (PDF)."}, status_code=400)
-
+    """Process user query through the chat controller."""
     try:
-        # ROUTE THROUGH HANDLER
-        result = handler.handle_user_query(
-            user_id=request.user_id,
+        result = chat_controller.process_user_query(
             query_text=request.text,
+            user_id=1,  # Always use user ID 1 as specified
             thread_id=request.thread_id
         )
         return JSONResponse(content=result)
-
     except Exception as e:
-        logger.error(e)
+        logger.error(f"Error in chat endpoint: {str(e)}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.post("/api/threads/{thread_id}/branch")
+async def branch_from_message(thread_id: int, request: BranchRequest):
+    """Create a branch from a specific message in a thread."""
+    try:
+        result = chat_controller.process_user_query(
+            query_text=request.content,
+            user_id=1,  # Always use user ID 1
+            thread_id=thread_id,
+            parent_message_id=request.parent_message_id
+        )
+        return JSONResponse(content=result)
+    except Exception as e:
+        logger.error(f"Error branching conversation: {str(e)}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+@app.get("/api/documents")
+async def get_documents():
+    """Fetch list of all documents for the sidebar."""
+    try:
+        docs = db_manager.get_all_documents()
+        return JSONResponse(content={"documents": jsonable_encoder(docs)})
+    except Exception as e:
+        print("Done got error", str(e))
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.get("/api/documents/{doc_id}/content")
+async def get_document_content(doc_id: int):
+    """Stream the PDF file itself."""
+    # In a real app, you'd fetch the filename from DB using doc_id to be safe
+    # For simplicity, we just look for matching files in storage
+    docs = db_manager.get_all_documents()
+    target_doc = next((d for d in docs if d['id'] == doc_id), None)
+
+    if not target_doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_path = os.path.join(STORAGE_DIR, target_doc['filename'])
+    if not os.path.exists(file_path):
+        raise HTTPException(status_code=404, detail="File missing from server storage")
+
+    return FileResponse(file_path, media_type='application/pdf')
+
+
+@app.get("/api/documents/{doc_id}/threads")
+async def get_document_threads(doc_id: int):
+    """Fetch social threads linked to this document."""
+    try:
+        threads = db_manager.get_threads_for_document(doc_id)
+        return JSONResponse(content={"threads": jsonable_encoder(threads)})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+@app.get("/api/threads/{thread_id}")
+async def get_thread(thread_id: int):
+    """Fetch a single thread with all its messages."""
+    try:
+        thread = db_manager.get_thread_with_messages(thread_id)
+        if not thread:
+            raise HTTPException(status_code=404, detail="Thread not found")
+        return JSONResponse(content={"thread": jsonable_encoder(thread)})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
+
+class MessageRequest(BaseModel):
+    content: str
+    user: str = "Anonymous"
+
+
+@app.post("/api/threads/{thread_id}/messages")
+async def add_message_to_thread(thread_id: int, request: MessageRequest):
+    """Add a new message to an existing thread."""
+    try:
+        # Get the last message ID to maintain conversation flow
+        parent_msg_id = db_manager.get_last_message_id(thread_id)
+
+        # Add the message (using user_id=1 for now, you can extend this)
+        message_id = db_manager.add_message(
+            thread_id=thread_id,
+            user_id=1,  # Default user ID - extend with actual user system later
+            role="user",
+            content=request.content,
+            parent_message_id=parent_msg_id
+        )
+
+        return JSONResponse(content={"status": "success", "message_id": message_id})
+    except Exception as e:
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
 
 # Create static folder if it doesn't exist (logic handled by manual file creation below)
 if not os.path.exists("static"):

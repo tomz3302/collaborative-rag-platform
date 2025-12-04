@@ -1,70 +1,89 @@
 import logging
+from typing import List, Dict, Optional, Tuple
 
 # Setup logging
-logger = logging.getLogger("ChatService")
+logger = logging.getLogger("ChatState")
 
 
 class OmarHandlers:
-    def __init__(self, db_manager, rag_system):
-        """
-        :param db_manager: Instance of DBManager
-        :param rag_system: Instance of AdvancedRAGSystem
-        """
-        self.db = db_manager
-        self.rag = rag_system
+    """
+    RESPONSIBILITY:
+    Strictly manages conversation state, logging, and database interactions.
+    It does NOT know about the AI/RAG system.
+    """
 
-    def handle_user_query(self, user_id: int, query_text: str, thread_id: int = None):
-        # --- Step 1: Thread Management ---
+    def __init__(self, db_manager):
+        self.db = db_manager
+
+    def ensure_thread(self, user_id: int, query_text: str, thread_id: int = None) -> int:
+        """Creates a new thread if needed, or validates the existing one."""
         if not thread_id:
+            # Create Title from query
             title_snippet = (query_text[:47] + '...') if len(query_text) > 47 else query_text
             thread_id = self.db.create_thread(title=title_snippet, creator_id=user_id)
             logger.info(f"Created new thread ID: {thread_id}")
-            parent_msg_id = None
-        else:
-            parent_msg_id = self.db.get_last_message_id(thread_id)
+            return thread_id
+        return thread_id
 
-        # --- Step 2: Save User Question ---
-        user_msg_id = self.db.add_message(
+    def resolve_parent_message(self, thread_id: int, requested_parent_id: int = None) -> Tuple[int, bool]:
+        """
+        Determines the actual parent message ID and whether this is a fork.
+        Returns: (actual_parent_id, is_new_fork)
+        """
+        if requested_parent_id:
+            # User explicitly chose a message to reply to
+            last_msg_id = self.db.get_last_message_id(thread_id)
+            # If they chose a message that ISN'T the last one, it's a fork
+            is_fork = (last_msg_id and requested_parent_id != last_msg_id)
+            if is_fork:
+                logger.info(f"Fork detected from Message {requested_parent_id}")
+            return requested_parent_id, is_fork
+
+        # Default: Reply to the latest message
+        last_id = self.db.get_last_message_id(thread_id)
+        return last_id, False
+
+    def log_user_message(self, thread_id: int, user_id: int, content: str, parent_id: int, is_fork: bool) -> int:
+        """Saves the user's input to DB."""
+        return self.db.add_message(
             thread_id=thread_id,
             user_id=user_id,
             role="user",
-            content=query_text,
-            parent_message_id=parent_msg_id
+            content=content,
+            parent_message_id=parent_id,
+            is_fork_start=is_fork
         )
 
-        # --- Step 3: Query the RAG System (Directly, no requests.post) ---
-        # We call the python method directly since we are in the same app
-        rag_result = self.rag.query(query_text)
+    def get_chat_history(self, parent_id: int) -> List[Dict]:
+        """Fetches context for the AI."""
+        if not parent_id:
+            return []
 
-        # Ensure we handle the dict response correctly
-        ai_response_text = rag_result.get('answer', "I'm sorry, I couldn't process that.")
-        source_filename = rag_result.get('source_document')
+        history = self.db.get_context_messages(parent_id)
+        logger.info(f"Fetched {len(history)} messages of history context.")
+        return history
 
-        # --- Step 4: Save AI Response ---
-        self.db.add_message(
+    def log_ai_response(self, thread_id: int, content: str, parent_id: int) -> int:
+        """Saves the AI's output to DB."""
+        return self.db.add_message(
             thread_id=thread_id,
-            user_id=0,  # 0 usually represents the System/AI
+            user_id=0,  # System ID
             role="assistant",
-            content=ai_response_text,
-            parent_message_id=user_msg_id
+            content=content,
+            parent_message_id=parent_id,
+            is_fork_start=False  # AI never starts a fork
         )
 
-        # --- Step 5: Automatic Context Anchoring ---
-        if source_filename:
-            # Clean up filename if needed (e.g., remove 'temp_' prefix if DB stores it differently)
-            clean_filename = source_filename.replace("temp_", "")
+    def anchor_thread_to_document(self, thread_id: int, source_filename: str):
+        """Links the thread to the document used by RAG."""
+        if not source_filename:
+            return
 
-            doc_id = self.db.get_document_id_by_filename(clean_filename)
+        clean_filename = source_filename.replace("temp_", "")
+        doc_id = self.db.get_document_id_by_filename(clean_filename)
 
-            if doc_id:
-                page_num = 1  # Default to 1 for now
-                self.db.link_thread_to_doc(thread_id, doc_id, page_num)
-                logger.info(f"Anchored Thread {thread_id} to Document {doc_id}")
-            else:
-                logger.warning(f"RAG cited '{source_filename}', but it was not found in the DB.")
-
-        return {
-            "thread_id": thread_id,
-            "response": ai_response_text,
-            "source": source_filename
-        }
+        if doc_id:
+            self.db.link_thread_to_doc(thread_id, doc_id, page_num=1)
+            logger.info(f"Anchored Thread {thread_id} to Document {doc_id}")
+        else:
+            logger.warning(f"Could not anchor thread: Document '{clean_filename}' not found in DB.")

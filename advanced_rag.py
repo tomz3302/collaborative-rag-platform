@@ -1,6 +1,6 @@
 import os
 import sys
-
+import pickle
 from typing import List, Dict, Any
 
 
@@ -44,10 +44,14 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 TOP_K_RETRIEVAL = 15  # Fetch more for hybrid search
 TOP_K_RERANK = 5      # Final number of docs to LLM
+EMBEDDINGS_DIR = "embeddings"  # Directory to store vector embeddings
 
 class AdvancedRAGSystem:
     def __init__(self):
         print("Initializing Advanced RAG System...")
+        
+        # Create embeddings directory if it doesn't exist
+        os.makedirs(EMBEDDINGS_DIR, exist_ok=True)
         
         # 1. Initialize LLMs
         # Main LLM for Generation
@@ -74,7 +78,73 @@ class AdvancedRAGSystem:
 
         self.vectorstore = None
         self.retriever = None
+        self.indexed_documents = []  # Track which documents are indexed
         print("System Initialized.")
+
+    def load_existing_embeddings(self):
+        """
+        Load previously saved embeddings from disk if they exist.
+        Returns True if embeddings were loaded, False otherwise.
+        """
+        faiss_index_path = os.path.join(EMBEDDINGS_DIR, "faiss_index")
+        bm25_docs_path = os.path.join(EMBEDDINGS_DIR, "bm25_documents.pkl")
+        indexed_docs_path = os.path.join(EMBEDDINGS_DIR, "indexed_documents.pkl")
+        
+        # Check if all required files exist
+        if not os.path.exists(faiss_index_path):
+            print("No existing embeddings found.")
+            return False
+        
+        try:
+            print("Loading existing embeddings from disk...")
+            
+            # 1. Load FAISS index
+            self.vectorstore = FAISS.load_local(
+                faiss_index_path, 
+                self.embeddings,
+                allow_dangerous_deserialization=True
+            )
+            faiss_retriever = self.vectorstore.as_retriever(search_kwargs={"k": TOP_K_RETRIEVAL})
+            
+            # 2. Load BM25 documents
+            if os.path.exists(bm25_docs_path):
+                with open(bm25_docs_path, "rb") as f:
+                    bm25_docs = pickle.load(f)
+                bm25_retriever = BM25Retriever.from_documents(bm25_docs)
+                bm25_retriever.k = TOP_K_RETRIEVAL
+            else:
+                print("Warning: BM25 documents not found, using empty retriever")
+                bm25_retriever = BM25Retriever.from_documents([])
+                bm25_retriever.k = TOP_K_RETRIEVAL
+            
+            # 3. Create Ensemble Retriever
+            self.ensemble_retriever = EnsembleRetriever(
+                retrievers=[bm25_retriever, faiss_retriever],
+                weights=[0.5, 0.5]
+            )
+            
+            # 4. Add Reranking Layer
+            self.retriever = ContextualCompressionRetriever(
+                base_compressor=self.compressor,
+                base_retriever=self.ensemble_retriever
+            )
+            
+            # 5. Load indexed documents list
+            if os.path.exists(indexed_docs_path):
+                with open(indexed_docs_path, "rb") as f:
+                    self.indexed_documents = pickle.load(f)
+            
+            print(f"Successfully loaded embeddings for {len(self.indexed_documents)} document(s).")
+            print(f"Indexed documents: {', '.join(self.indexed_documents)}")
+            return True
+            
+        except Exception as e:
+            print(f"Error loading embeddings: {str(e)}")
+            print("Will start with empty index.")
+            self.vectorstore = None
+            self.retriever = None
+            self.indexed_documents = []
+            return False
 
     #
     def load_and_process_pdf(self, file_path: str) -> List[Document]:
@@ -145,17 +215,33 @@ class AdvancedRAGSystem:
     def build_index(self, documents: List[Document]):
         """
         Builds Hybrid Index: FAISS (Vector) + BM25 (Keyword)
+        Also saves the index to disk for persistence.
         """
         print("--- Building Hybrid Index ---")
         
         # 1. Build Vector Store (FAISS) with Gemini 004 Embeddings
         print("Indexing into FAISS...")
-        self.vectorstore = FAISS.from_documents(documents, self.embeddings)
+        if self.vectorstore is None:
+            self.vectorstore = FAISS.from_documents(documents, self.embeddings)
+        else:
+            # If vectorstore exists, add new documents to it
+            new_vectorstore = FAISS.from_documents(documents, self.embeddings)
+            self.vectorstore.merge_from(new_vectorstore)
+        
         faiss_retriever = self.vectorstore.as_retriever(search_kwargs={"k": TOP_K_RETRIEVAL})
 
         # 2. Build BM25 Retriever
         print("Indexing into BM25...")
-        bm25_retriever = BM25Retriever.from_documents(documents)
+        # Load existing documents if they exist
+        bm25_docs_path = os.path.join(EMBEDDINGS_DIR, "bm25_documents.pkl")
+        existing_bm25_docs = []
+        if os.path.exists(bm25_docs_path):
+            with open(bm25_docs_path, "rb") as f:
+                existing_bm25_docs = pickle.load(f)
+        
+        # Combine existing and new documents
+        all_bm25_docs = existing_bm25_docs + documents
+        bm25_retriever = BM25Retriever.from_documents(all_bm25_docs)
         bm25_retriever.k = TOP_K_RETRIEVAL
 
         # 3. Create Ensemble Retriever (Hybrid Search)
@@ -171,7 +257,28 @@ class AdvancedRAGSystem:
             base_compressor=self.compressor,
             base_retriever=self.ensemble_retriever
         )
-        print("Indexing Complete.")
+        
+        # 5. Save embeddings to disk
+        print("Saving embeddings to disk...")
+        faiss_index_path = os.path.join(EMBEDDINGS_DIR, "faiss_index")
+        self.vectorstore.save_local(faiss_index_path)
+        
+        # Save BM25 documents
+        with open(bm25_docs_path, "wb") as f:
+            pickle.dump(all_bm25_docs, f)
+        
+        # Track indexed documents
+        for doc in documents:
+            source = doc.metadata.get('source_document', 'Unknown')
+            if source not in self.indexed_documents:
+                self.indexed_documents.append(source)
+        
+        # Save indexed documents list
+        indexed_docs_path = os.path.join(EMBEDDINGS_DIR, "indexed_documents.pkl")
+        with open(indexed_docs_path, "wb") as f:
+            pickle.dump(self.indexed_documents, f)
+        
+        print("Indexing Complete and Saved.")
 
     def query(self, user_query: str) -> Dict[str, Any]:
         """
@@ -238,5 +345,4 @@ class AdvancedRAGSystem:
             "source_document": top_source_filename,
             "top_chunk_page_content": top_doc.page_content[:200] + "..."  # Optional: Debug info
         }
-
 
