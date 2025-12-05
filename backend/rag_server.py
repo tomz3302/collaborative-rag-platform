@@ -6,6 +6,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from chat_controller import ChatController
 
@@ -36,7 +37,7 @@ app.add_middleware(
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 
 # Setup Persistent Storage for PDFs in repo root
-STORAGE_DIR = os.path.join(BASE_DIR, "storage")
+STORAGE_DIR = os.path.join(BASE_DIR, "backend", "storage")
 if not os.path.exists(STORAGE_DIR):
     os.makedirs(STORAGE_DIR)
 
@@ -158,13 +159,17 @@ async def get_document_content(doc_id: int):
     # In a real app, you'd fetch the filename from DB using doc_id to be safe
     # For simplicity, we just look for matching files in storage
     docs = db_manager.get_all_documents()
+    logger.info(f"Requested doc_id: {doc_id}")
+    logger.info(f"Available docs: {docs}")
     target_doc = next((d for d in docs if d['id'] == doc_id), None)
 
     if not target_doc:
+        logger.info("Document not found in database")
         raise HTTPException(status_code=404, detail="Document not found")
 
     file_path = os.path.join(STORAGE_DIR, target_doc['filename'])
     if not os.path.exists(file_path):
+        logger.info(f"File missing from server storage: {file_path}")
         raise HTTPException(status_code=404, detail="File missing from server storage")
 
     return FileResponse(file_path, media_type='application/pdf')
