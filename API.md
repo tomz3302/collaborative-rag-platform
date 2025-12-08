@@ -1,346 +1,666 @@
-# Nexus RAG API Documentation
+# Nexus RAG API Reference
 
-## Overview
-Nexus RAG is a Retrieval-Augmented Generation (RAG) system with social collaboration features built on FastAPI. It allows users to upload documents, query them intelligently, and have conversations organized in threads with branching discussions.
+Complete API documentation for the Collaborative RAG Platform backend server.
 
 **Base URL:** `http://localhost:8000`
+
+**Default Port:** 8000
 
 ---
 
 ## Table of Contents
-- [Authentication](#authentication)
-- [Endpoints](#endpoints)
-  - [Documents](#documents)
-  - [Chat & Queries](#chat--queries)
-  - [Threads](#threads)
-  - [Messages](#messages)
-- [Request/Response Models](#requestresponse-models)
-- [Error Handling](#error-handling)
+1. [Upload API](#upload-api)
+2. [Chat APIs](#chat-apis)
+3. [Document APIs](#document-apis)
+4. [Thread APIs](#thread-apis)
+5. [Space APIs](#space-apis)
 
 ---
 
-## Authentication
-Currently, the API uses a default user ID (`user_id: 1`) for all requests. In future versions, implement proper user authentication (JWT tokens, session management, etc.).
+## Upload API
 
----
+### POST /api/upload
+Upload a PDF document to the knowledge base and index it for RAG queries.
 
-## Endpoints
+**Endpoint:** `POST /api/upload`
 
-### Documents
+**Content-Type:** `multipart/form-data`
 
-#### GET `/api/documents`
-Fetch a list of all uploaded documents.
+**Request Parameters:**
+- `file` (form-data, required): PDF file to upload
 
-**Parameters:** None
-
-**Response:**
-```json
-{
-  "documents": [
-    {
-      "id": 1,
-      "filename": "RAG Stress Test.pdf",
-      "file_type": "pdf",
-      "uploaded_at": "2025-12-03T13:31:10"
-    },
-    {
-      "id": 2,
-      "filename": "Agile Software Engineering Project (2).pdf",
-      "file_type": "pdf",
-      "uploaded_at": "2025-12-04T22:33:55"
-    }
-  ]
-}
-```
-
-**Status Codes:**
-- `200 OK` - Successfully retrieved documents
-- `500 Internal Server Error` - Database error
-
----
-
-#### POST `/api/upload`
-Upload a PDF file to the knowledge base. The file is processed and indexed for RAG queries.
-
-**Parameters:**
-- `file` (multipart/form-data, required) - PDF file to upload
-
-**Response:**
+**Success Response (200):**
 ```json
 {
   "status": "success",
-  "message": "Knowledge Base Ready"
+  "message": "file uploaded correctly",
+  "document_id": 1
 }
 ```
 
-**Status Codes:**
-- `200 OK` - File successfully uploaded and indexed
-- `500 Internal Server Error` - File processing error
-
-**Example:**
-```bash
-curl -X POST http://localhost:8000/api/upload \
-  -F "file=@document.pdf"
-```
-
----
-
-#### GET `/api/documents/{doc_id}/content`
-Stream the PDF file content for viewing in the browser.
-
-**Parameters:**
-- `doc_id` (path, required) - Document ID
-
-**Response:** PDF file stream
-
-**Status Codes:**
-- `200 OK` - File successfully retrieved
-- `404 Not Found` - Document not found or file missing
-
-**Example:**
-```bash
-curl -X GET http://localhost:8000/api/documents/1/content \
-  --output document.pdf
-```
-
----
-
-#### GET `/api/documents/{doc_id}/threads`
-Fetch all threads (conversations) associated with a specific document.
-
-**Parameters:**
-- `doc_id` (path, required) - Document ID
-
-**Response:**
+**Error Response (500):**
 ```json
 {
-  "threads": [
-    {
-      "id": 1,
-      "document_id": 1,
-      "title": "QuickSort Complexity Analysis",
-      "page_number": 4,
-      "created_at": "2025-12-04T10:15:30",
-      "updated_at": "2025-12-04T10:45:20"
-    }
-  ]
+  "status": "error",
+  "detail": "<error message>"
 }
 ```
 
-**Status Codes:**
-- `200 OK` - Successfully retrieved threads
-- `500 Internal Server Error` - Database error
+**Example (PowerShell):**
+```powershell
+curl -X POST http://localhost:8000/api/upload `
+  -F "file=@C:\path\to\document.pdf"
+```
+
+**Example (JavaScript/Fetch):**
+```javascript
+const formData = new FormData();
+formData.append('file', fileInput.files[0]);
+
+const response = await fetch('/api/upload', {
+  method: 'POST',
+  body: formData
+});
+const data = await response.json();
+```
+
+**Notes:**
+- Files are stored in `backend/storage/` directory
+- Document is automatically indexed in the RAG system for semantic search
+- Currently defaults to `space_id=1`
+- Returns the database ID of the created document
 
 ---
 
-### Chat & Queries
+## Chat APIs
 
-#### POST `/api/chat`
-Send a query to the RAG system. Creates a new thread or continues an existing one.
+### POST /api/chat
+Send a query to the RAG system and get an AI-generated response with sources.
+
+**Endpoint:** `POST /api/chat`
+
+**Content-Type:** `application/json`
+
+**Query Parameters:**
+- `space_id` (optional, default: 1): The workspace/space ID
 
 **Request Body:**
 ```json
 {
-  "text": "Explain the time complexity of QuickSort",
+  "text": "What is the main topic of the document?",
   "user_id": 1,
   "thread_id": null
 }
 ```
 
-**Response:**
+**Request Schema:**
+- `text` (string, required): The user's question/query
+- `user_id` (int, optional, default: 1): User ID
+- `thread_id` (int, optional): If provided, continues an existing conversation thread
+
+**Success Response (200):**
 ```json
 {
-  "response": "QuickSort has a time complexity of O(n log n) in the average case and O(n²) in the worst case...",
-  "source": "RAG Stress Test.pdf",
-  "thread_id": 1
+  "answer": "The main topic is...",
+  "sources": [...],
+  "thread_id": 1,
+  "message_id": 42
 }
 ```
 
-**Parameters:**
-- `text` (string, required) - User query
-- `user_id` (integer, optional, default: 1) - User ID
-- `thread_id` (integer, optional) - Existing thread ID to continue conversation
-
-**Status Codes:**
-- `200 OK` - Query processed successfully
-- `500 Internal Server Error` - Processing error
-
-**Example:**
-```bash
-curl -X POST http://localhost:8000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{
-    "text": "What is the best sorting algorithm?",
-    "user_id": 1
-  }'
+**Error Response (500):**
+```json
+{
+  "error": "<error message>"
+}
 ```
+
+**Example (PowerShell):**
+```powershell
+curl -X POST "http://localhost:8000/api/chat?space_id=1" `
+  -H "Content-Type: application/json" `
+  -d '{"text":"What is machine learning?","thread_id":null}'
+```
+
+**Example (JavaScript/Fetch):**
+```javascript
+const response = await fetch('/api/chat?space_id=1', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    text: 'What is machine learning?',
+    thread_id: null
+  })
+});
+const data = await response.json();
+```
+
+**Notes:**
+- If `thread_id` is null, a new conversation thread is created
+- If `thread_id` is provided, the message is added to that thread
+- The response includes the `thread_id` - save it to continue the conversation
+- Always uses `user_id=1` internally (hardcoded)
 
 ---
 
-#### POST `/api/threads/{thread_id}/branch`
-Create a branch from a specific message in a thread. Allows for exploring alternative conversation paths.
+### POST /api/threads/{thread_id}/branch
+Create a branch (fork) from a specific message in a conversation thread.
+
+**Endpoint:** `POST /api/threads/{thread_id}/branch`
+
+**Content-Type:** `application/json`
+
+**Path Parameters:**
+- `thread_id` (int, required): The thread to branch from
+
+**Query Parameters:**
+- `space_id` (optional, default: 1): The workspace/space ID
 
 **Request Body:**
 ```json
 {
-  "content": "Let me explore this further...",
-  "parent_message_id": 5,
+  "content": "Can you explain this differently?",
+  "parent_message_id": 42,
   "user_id": 1
 }
 ```
 
-**Response:**
+**Request Schema:**
+- `content` (string, required): The new message/query for the branch
+- `parent_message_id` (int, required): The message ID to branch from
+- `user_id` (int, optional, default: 1): User ID
+
+**Success Response (200):**
 ```json
 {
-  "response": "Detailed analysis of the branched topic...",
-  "source": "RAG Stress Test.pdf",
-  "thread_id": 2
+  "answer": "...",
+  "sources": [...],
+  "thread_id": 1,
+  "message_id": 43
 }
 ```
 
-**Parameters:**
-- `thread_id` (path, required) - Parent thread ID
-- `content` (string, required) - Message content
-- `parent_message_id` (integer, required) - Message ID to branch from
-- `user_id` (integer, optional, default: 1) - User ID
-
-**Status Codes:**
-- `200 OK` - Branch created successfully
-- `500 Internal Server Error` - Processing error
-
-**Example:**
-```bash
-curl -X POST http://localhost:8000/api/threads/1/branch \
-  -H "Content-Type: application/json" \
-  -d '{
-    "content": "Dig deeper into this concept",
-    "parent_message_id": 5,
-    "user_id": 1
-  }'
+**Error Response (500):**
+```json
+{
+  "error": "<error message>"
+}
 ```
+
+**Example (PowerShell):**
+```powershell
+curl -X POST "http://localhost:8000/api/threads/5/branch?space_id=1" `
+  -H "Content-Type: application/json" `
+  -d '{"content":"Explain this more simply","parent_message_id":42}'
+```
+
+**Notes:**
+- Creates a new conversational branch from a specific message
+- Useful for exploring alternative explanations or "what-if" scenarios
+- The branch inherits context from the parent message's conversation path
 
 ---
 
-### Threads
+## Document APIs
 
-#### GET `/api/threads/{thread_id}`
-Fetch a single thread with all its messages.
+### GET /api/documents
+Retrieve a list of all documents or documents for a specific space.
 
-**Parameters:**
-- `thread_id` (path, required) - Thread ID
+**Endpoint:** `GET /api/documents`
 
-**Response:**
+**Query Parameters:**
+- `space_id` (int, optional): Filter documents by space ID
+
+**Success Response (200):**
+```json
+{
+  "documents": [
+    {
+      "id": 1,
+      "filename": "lecture_notes.pdf",
+      "file_type": "pdf",
+      "file_url": "/path/to/storage/lecture_notes.pdf",
+      "uploaded_at": "2025-12-08T10:30:00"
+    },
+    {
+      "id": 2,
+      "filename": "textbook.pdf",
+      "file_type": "pdf",
+      "file_url": "/path/to/storage/textbook.pdf",
+      "uploaded_at": "2025-12-07T14:20:00"
+    }
+  ]
+}
+```
+
+**Error Response (500):**
+```json
+{
+  "error": "<error message>"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+# Get all documents
+curl http://localhost:8000/api/documents
+
+# Get documents for a specific space
+curl "http://localhost:8000/api/documents?space_id=1"
+```
+
+**Example (JavaScript/Fetch):**
+```javascript
+// Get documents for space_id=1
+const response = await fetch('/api/documents?space_id=1');
+const data = await response.json();
+console.log(data.documents);
+```
+
+**Notes:**
+- If `space_id` is not provided, returns all documents across all spaces
+- If `space_id` is provided, returns only documents in that space
+- Includes the `file_url` field which contains the storage path
+
+---
+
+### GET /api/documents/{doc_id}/content
+Stream/download the PDF file content.
+
+**Endpoint:** `GET /api/documents/{doc_id}/content`
+
+**Path Parameters:**
+- `doc_id` (int, required): The document ID
+
+**Success Response (200):**
+- Returns the PDF file with `Content-Type: application/pdf`
+
+**Error Response (404):**
+```json
+{
+  "detail": "Document not found"
+}
+```
+or
+```json
+{
+  "detail": "File missing from server storage"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+# Download PDF
+curl http://localhost:8000/api/documents/1/content -o document.pdf
+```
+
+**Example (HTML):**
+```html
+<!-- Embed in iframe -->
+<iframe src="/api/documents/1/content" width="100%" height="600px"></iframe>
+```
+
+**Notes:**
+- Returns the actual PDF file for viewing/downloading
+- File is served from `backend/storage/` directory
+- Checks database for file metadata before serving
+
+---
+
+### GET /api/documents/{doc_id}/threads
+Get all conversation threads associated with a specific document.
+
+**Endpoint:** `GET /api/documents/{doc_id}/threads`
+
+**Path Parameters:**
+- `doc_id` (int, required): The document ID
+
+**Success Response (200):**
+```json
+{
+  "threads": [
+    {
+      "id": 1,
+      "title": "Discussion about Chapter 1",
+      "creator_user_id": 1,
+      "created_at": "2025-12-08T09:00:00",
+      "page_number": 1
+    },
+    {
+      "id": 2,
+      "title": "Questions on Section 2.3",
+      "creator_user_id": 1,
+      "created_at": "2025-12-08T11:30:00",
+      "page_number": 15
+    }
+  ]
+}
+```
+
+**Error Response (500):**
+```json
+{
+  "error": "<error message>"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+curl http://localhost:8000/api/documents/1/threads
+```
+
+**Notes:**
+- Returns threads linked to the document via context anchors
+- Threads are ordered by page number (ascending) and creation date (descending)
+- Shows which page of the document each thread is associated with
+
+---
+
+## Thread APIs
+
+### GET /api/threads/{thread_id}
+Retrieve a conversation thread with all its messages.
+
+**Endpoint:** `GET /api/threads/{thread_id}`
+
+**Path Parameters:**
+- `thread_id` (int, required): The thread ID
+
+**Success Response (200):**
 ```json
 {
   "thread": {
     "id": 1,
-    "document_id": 1,
-    "title": "QuickSort Complexity Analysis",
-    "page_number": 4,
-    "created_at": "2025-12-04T10:15:30",
+    "title": "Discussion about ML",
+    "creator_user_id": 1,
+    "is_public": true,
+    "created_at": "2025-12-08T09:00:00",
+    "page_number": 5,
     "messages": [
       {
         "id": 1,
-        "thread_id": 1,
         "user_id": 1,
         "role": "user",
-        "content": "Explain QuickSort",
+        "content": "What is machine learning?",
+        "path": "1/",
         "parent_message_id": null,
-        "created_at": "2025-12-04T10:15:30"
+        "branch_id": null,
+        "created_at": "2025-12-08T09:00:00"
       },
       {
         "id": 2,
-        "thread_id": 1,
-        "user_id": null,
+        "user_id": 1,
         "role": "assistant",
-        "content": "QuickSort is a divide-and-conquer algorithm...",
+        "content": "Machine learning is...",
+        "path": "1/2/",
         "parent_message_id": 1,
-        "created_at": "2025-12-04T10:15:45"
+        "branch_id": null,
+        "created_at": "2025-12-08T09:00:05"
       }
     ]
   }
 }
 ```
 
-**Status Codes:**
-- `200 OK` - Successfully retrieved thread
-- `404 Not Found` - Thread not found
-- `500 Internal Server Error` - Database error
-
-**Example:**
-```bash
-curl -X GET http://localhost:8000/api/threads/1
+**Error Response (404):**
+```json
+{
+  "detail": "Thread not found"
+}
 ```
+
+**Error Response (500):**
+```json
+{
+  "error": "<error message>"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+curl http://localhost:8000/api/threads/1
+```
+
+**Notes:**
+- Returns the complete conversation tree with all messages
+- Messages include path information for branching/forking
+- `path` field shows the message ancestry (e.g., "1/5/20/" means message 20 is a reply to 5, which is a reply to 1)
+- `branch_id` indicates which branch the message belongs to (for forked conversations)
 
 ---
 
-### Messages
+### POST /api/threads/{thread_id}/messages
+Add a new message to an existing thread.
 
-#### POST `/api/threads/{thread_id}/messages`
-Add a new message to an existing thread. The message is linked to the last message in the thread to maintain conversation flow.
+**Endpoint:** `POST /api/threads/{thread_id}/messages`
+
+**Path Parameters:**
+- `thread_id` (int, required): The thread ID
+
+**Content-Type:** `application/json`
 
 **Request Body:**
 ```json
 {
-  "content": "Can you provide code examples?",
-  "user": "John Doe"
+  "content": "Can you elaborate on that?",
+  "user_id": "Anonymous"
 }
 ```
 
-**Response:**
+**Request Schema:**
+- `content` (string, required): The message content
+- `user_id` (string, optional, default: "Anonymous"): User identifier (note: currently a string field)
+
+**Success Response (200):**
 ```json
 {
   "status": "success",
-  "message_id": 10
+  "message_id": 42
 }
 ```
 
-**Parameters:**
-- `thread_id` (path, required) - Thread ID
-- `content` (string, required) - Message content
-- `user` (string, optional, default: "Anonymous") - User name/identifier
-
-**Status Codes:**
-- `200 OK` - Message successfully added
-- `500 Internal Server Error` - Database error
-
-**Example:**
-```bash
-curl -X POST http://localhost:8000/api/threads/1/messages \
-  -H "Content-Type: application/json" \
-  -d '{
-    "content": "Please provide more examples",
-    "user": "Student"
-  }'
+**Error Response (500):**
+```json
+{
+  "error": "<error message>"
+}
 ```
+
+**Example (PowerShell):**
+```powershell
+curl -X POST http://localhost:8000/api/threads/1/messages `
+  -H "Content-Type: application/json" `
+  -d '{"content":"Thanks for the explanation!"}'
+```
+
+**Notes:**
+- Adds a message to the thread as a continuation of the last message
+- Uses `user_id=1` internally for database operations
+- Returns the created message ID
 
 ---
 
-## Request/Response Models
+## Space APIs
 
-### QueryRequest
-```python
+### POST /api/spaces
+Create a new workspace/space for organizing documents and threads.
+
+**Endpoint:** `POST /api/spaces`
+
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
 {
-  "text": str,              # Required: User query/message
-  "user_id": int,           # Optional, default: 1
-  "thread_id": Optional[int] # Optional: Existing thread ID
+  "name": "CS101 - Algorithms",
+  "description": "Course materials and discussions for Algorithms"
 }
 ```
 
-### BranchRequest
-```python
+**Request Schema:**
+- `name` (string, required): Display name for the space
+- `description` (string, optional): Description of the space
+
+**Success Response (200):**
+```json
 {
-  "content": str,           # Required: Message content
-  "parent_message_id": int, # Required: Message ID to branch from
-  "user_id": int            # Optional, default: 1
+  "status": "success",
+  "space_id": 1
 }
 ```
 
-### MessageRequest
-```python
+**Error Response (500):**
+```json
 {
-  "content": str,           # Required: Message content
-  "user": str               # Optional, default: "Anonymous"
+  "error": "<error message>"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+curl -X POST http://localhost:8000/api/spaces `
+  -H "Content-Type: application/json" `
+  -d '{"name":"CS101","description":"Algorithms course"}'
+```
+
+**Example (JavaScript/Fetch):**
+```javascript
+const response = await fetch('/api/spaces', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    name: 'CS101',
+    description: 'Algorithms course'
+  })
+});
+const data = await response.json();
+console.log('Created space:', data.space_id);
+```
+
+**Notes:**
+- Creates a new isolated workspace for organizing resources
+- Returns the created `space_id` to use in other API calls
+- Use spaces to separate different courses, projects, or teams
+
+---
+
+### GET /api/spaces
+Retrieve all available spaces/workspaces.
+
+**Endpoint:** `GET /api/spaces`
+
+**Success Response (200):**
+```json
+{
+  "spaces": [
+    {
+      "id": 1,
+      "name": "CS101",
+      "description": "Algorithms course",
+      "created_at": "2025-12-08T12:34:56"
+    },
+    {
+      "id": 2,
+      "name": "EE200",
+      "description": "Circuit Analysis",
+      "created_at": "2025-12-07T09:12:34"
+    }
+  ]
+}
+```
+
+**Error Response (500):**
+```json
+{
+  "error": "<error message>"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+curl http://localhost:8000/api/spaces
+```
+
+**Example (JavaScript/Fetch):**
+```javascript
+const response = await fetch('/api/spaces');
+const data = await response.json();
+console.log('Available spaces:', data.spaces);
+```
+
+**Notes:**
+- Lists all workspaces ordered by creation date (newest first)
+- Use this to populate a space selector in your UI
+- Each space can contain its own documents, threads, and conversations
+
+---
+
+## Integration Guide
+
+### Frontend Integration Examples
+
+#### Uploading a Document
+```javascript
+async function uploadDocument(file, spaceId = 1) {
+  const formData = new FormData();
+  formData.append('file', file);
+  
+  const response = await fetch('/api/upload', {
+    method: 'POST',
+    body: formData
+  });
+  
+  return await response.json();
+}
+```
+
+#### Starting a Chat Session
+```javascript
+async function startChat(question, spaceId = 1) {
+  const response = await fetch(`/api/chat?space_id=${spaceId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: question,
+      thread_id: null  // null = new conversation
+    })
+  });
+  
+  const data = await response.json();
+  // Save data.thread_id for follow-up questions
+  return data;
+}
+```
+
+#### Continuing a Conversation
+```javascript
+async function continueChat(question, threadId, spaceId = 1) {
+  const response = await fetch(`/api/chat?space_id=${spaceId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: question,
+      thread_id: threadId
+    })
+  });
+  
+  return await response.json();
+}
+```
+
+#### Creating a Branch
+```javascript
+async function branchConversation(content, threadId, parentMessageId, spaceId = 1) {
+  const response = await fetch(`/api/threads/${threadId}/branch?space_id=${spaceId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      content: content,
+      parent_message_id: parentMessageId
+    })
+  });
+  
+  return await response.json();
 }
 ```
 
@@ -348,123 +668,40 @@ curl -X POST http://localhost:8000/api/threads/1/messages \
 
 ## Error Handling
 
-### Standard Error Response
+All endpoints return appropriate HTTP status codes:
+
+- **200 OK**: Request successful
+- **404 Not Found**: Resource not found (document, thread, etc.)
+- **500 Internal Server Error**: Server-side error (check logs)
+
+Error responses include an `error` or `detail` field with a description:
 ```json
 {
-  "error": "Error description",
-  "status": "error"
+  "error": "Description of what went wrong"
 }
 ```
 
-### Common Status Codes
-- `200 OK` - Request successful
-- `404 Not Found` - Resource not found
-- `500 Internal Server Error` - Server error (check logs)
+---
 
-### Logging
-All server errors are logged to the console with the prefix `RAG_Server:`. Check the server logs for detailed error messages.
+## Development Notes
+
+- **Default Space ID**: Most endpoints default to `space_id=1` if not specified
+- **User ID**: Currently hardcoded to `user_id=1` for all operations
+- **Storage**: Files are stored in `backend/storage/` directory
+- **CORS**: Configured for `localhost:8000`, `localhost:5173`, and `127.0.0.1` variants
+- **Frontend Build**: Serve frontend from backend using `npm run build` in frontend folder
 
 ---
 
-## Database Schema Reference
+## Server Information
 
-### documents
-- `id` (int, PK) - Document ID
-- `filename` (str) - Name of the uploaded file
-- `file_type` (str) - File type (e.g., "pdf")
-- `uploaded_at` (datetime) - Upload timestamp
-
-### threads
-- `id` (int, PK) - Thread ID
-- `document_id` (int, FK) - Associated document
-- `title` (str) - Thread title
-- `page_number` (int) - Page reference in document
-- `created_at` (datetime) - Creation timestamp
-- `updated_at` (datetime) - Last update timestamp
-
-### messages
-- `id` (int, PK) - Message ID
-- `thread_id` (int, FK) - Associated thread
-- `user_id` (int, FK) - Message author
-- `role` (str) - "user" or "assistant"
-- `content` (str) - Message text
-- `parent_message_id` (int, FK) - Parent message for branching
-- `created_at` (datetime) - Creation timestamp
+**Title**: Fluid RAG  
+**Host**: `0.0.0.0`  
+**Port**: `8000`  
+**Start Command**: `python -m uvicorn backend.rag_server:app --reload --port 8000`
 
 ---
 
-## Usage Examples
+**Last Updated**: December 8, 2025
 
-### Complete Workflow
-
-1. **Upload a document:**
-```bash
-curl -X POST http://localhost:8000/api/upload \
-  -F "file=@textbook.pdf"
-```
-
-2. **Get document list:**
-```bash
-curl -X GET http://localhost:8000/api/documents
-```
-
-3. **Start a new chat:**
-```bash
-curl -X POST http://localhost:8000/api/chat \
-  -H "Content-Type: application/json" \
-  -d '{"text": "What is this document about?"}'
-```
-
-4. **Get thread details:**
-```bash
-curl -X GET http://localhost:8000/api/threads/1
-```
-
-5. **Branch from a message:**
-```bash
-curl -X POST http://localhost:8000/api/threads/1/branch \
-  -H "Content-Type: application/json" \
-  -d '{
-    "content": "Can you explain this more?",
-    "parent_message_id": 2
-  }'
-```
-
----
-
-## Frontend Integration
-
-The frontend is automatically served from the backend on port 8000. The API endpoints are accessible via the same origin (localhost:8000/api/*).
-
-For development, the frontend dev server can connect to the backend API using:
-```
-http://localhost:8000/api/...
-```
-
----
-
-## Future Enhancements
-
-- [ ] Implement proper user authentication (JWT)
-- [ ] Add pagination for large document lists
-- [ ] Implement rate limiting
-- [ ] Add API versioning (e.g., `/api/v1/...`)
-- [ ] WebSocket support for real-time collaboration
-- [ ] Document search/filtering
-- [ ] Thread moderation and approval workflow
-- [ ] Analytics and usage metrics
-
----
-
-## Support
-
-For issues or questions:
-1. Check server logs (prefixed with `RAG_Server:`)
-2. Verify document storage path exists
-3. Ensure database is initialized
-4. Review error response for details
-
----
-
-*Last Updated: December 6, 2025*
 

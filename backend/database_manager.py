@@ -22,15 +22,35 @@ class DBManager:
         return mysql.connector.connect(**self.config)
 
     # --- THREADS ---
-    def create_thread(self, title: str, creator_id: int = 1) -> int:
-        """Starts a new conversation thread."""
+    def create_thread(self, space_id: int, title: str, creator_id: int = 1) -> int:
+        """
+        Starts a new conversation thread inside a specific Space.
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
-            query = "INSERT INTO threads (title, creator_user_id) VALUES (%s, %s)"
-            cursor.execute(query, (title, creator_id))
+            # Added space_id to the INSERT statement
+            query = "INSERT INTO threads (space_id, title, creator_user_id) VALUES (%s, %s, %s)"
+            cursor.execute(query, (space_id, title, creator_id))
             conn.commit()
             return cursor.lastrowid
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_threads_for_space(self, space_id: int) -> List[Dict]:
+        """(New) Gets all conversations in a specific workspace."""
+        conn = self.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            query = """
+                SELECT id, title, creator_user_id, created_at
+                FROM threads
+                WHERE space_id = %s
+                ORDER BY created_at DESC
+            """
+            cursor.execute(query, (space_id,))
+            return cursor.fetchall()
         finally:
             cursor.close()
             conn.close()
@@ -141,35 +161,61 @@ class DBManager:
             cursor.close()
             conn.close()
 
-    def get_all_documents(self) -> List[Dict]:
-        """Returns all documents stored in the system."""
+    def get_documents_for_space(self, space_id: int) -> List[Dict]:
+        """
+        (Edited from get_all_documents)
+        Now returns documents only for a specific Space.
+        """
         conn = self.get_connection()
         cursor = conn.cursor(dictionary=True)
         try:
             query = """
-                SELECT id, filename,file_type, uploaded_at
+                SELECT id, filename, file_type, file_url, uploaded_at
                 FROM documents
-                ORDER BY id ASC
+                WHERE space_id = %s
+                ORDER BY uploaded_at DESC
             """
-            cursor.execute(query)
+            cursor.execute(query, (space_id,))
             return cursor.fetchall()
         finally:
             cursor.close()
             conn.close()
 
-
-    # --- ANCHORING ---
-    def get_document_id_by_filename(self, filename: str) -> Optional[int]:
+    def get_document_id_by_filename(self, space_id: int, filename: str) -> Optional[int]:
+        """
+        (Edited) Finds a document ID.
+        Now scoped to 'space_id' so you can have 'Invoice.pdf' in two different spaces.
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
-            query = "SELECT id FROM documents WHERE filename LIKE %s LIMIT 1"
-            cursor.execute(query, (f"%{filename}",))
+            query = "SELECT id FROM documents WHERE space_id = %s AND filename LIKE %s LIMIT 1"
+            cursor.execute(query, (space_id, f"%{filename}"))
             result = cursor.fetchone()
             return result[0] if result else None
         finally:
             cursor.close()
             conn.close()
+
+    def add_document(self, space_id: int, filename: str, file_type: str, file_url: str) -> int:
+        """
+        (New) Registers a document after uploading to Cloud Storage (Koofr/R2).
+        Stores the 'file_url' (path) instead of the actual file bytes.
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            query = """
+                INSERT INTO documents (space_id, filename, file_type, file_url) 
+                VALUES (%s, %s, %s, %s)
+            """
+            cursor.execute(query, (space_id, filename, file_type, file_url))
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            cursor.close()
+            conn.close()
+
 
     def link_thread_to_doc(self, thread_id, doc_id, page_num=1):
         conn = self.get_connection()
@@ -247,3 +293,30 @@ class DBManager:
         finally:
             cursor.close()
             conn.close()
+
+    def create_space(self, name: str, description: str = None) -> int:
+        """Creates a new workspace (e.g., 'Legal Team', 'Project Alpha')."""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        try:
+            query = "INSERT INTO spaces (name, description) VALUES (%s, %s)"
+            cursor.execute(query, (name, description))
+            conn.commit()
+            return cursor.lastrowid
+        finally:
+            cursor.close()
+            conn.close()
+
+    def get_spaces(self) -> List[Dict]:
+        """Lists all available workspaces."""
+        conn = self.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM spaces ORDER BY created_at DESC")
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+            conn.close()
+
+
+

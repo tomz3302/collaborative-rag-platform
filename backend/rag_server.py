@@ -2,7 +2,7 @@ import os
 import shutil
 import logging
 from typing import Optional
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -62,10 +62,20 @@ class QueryRequest(BaseModel):
     user_id: int = 1       # Default user ID
     thread_id: Optional[int] = None # Optional thread ID
 
-class BranchRequest(BaseModel):
+class BranchRequest(BaseModel, ):
     content: str
     parent_message_id: int
     user_id: int = 1
+
+class MessageRequest(BaseModel):
+    content: str
+    user_id: str = "Anonymous"
+
+# New Pydantic model for creating Spaces
+class SpaceCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
 
 # Serve the frontend index if available; otherwise return a JSON health response
 @app.get("/")
@@ -91,36 +101,27 @@ async def upload_file(file: UploadFile = File(...)):
         docs = rag_system.load_and_process_pdf(file_location)
         rag_system.build_index(docs)
 
-        # 2. Add document record to Database
-        conn = db_manager.get_connection()
-        cursor = conn.cursor()
+        # 2. Add document record to Database using DBManager.add_document
+        # Use default space_id=1 for now; file_url is the relative path to the stored file
+        space_id = 1
+        file_url = file_location  # storing absolute path for now; adjust if using cloud storage
+        db_id = db_manager.add_document(space_id=space_id, filename=file.filename, file_type='pdf', file_url=file_url)
 
-        # Check if exists to avoid duplicates
-        cursor.execute("SELECT id FROM documents WHERE filename = %s", (file.filename,))
-        if not cursor.fetchone():
-            cursor.execute(
-                "INSERT INTO documents (filename, file_type) VALUES (%s, 'pdf')",
-                (file.filename,)
-            )
-            conn.commit()
-
-        cursor.close()
-        conn.close()
-
-        return JSONResponse(content={"status": "success", "message": "Knowledge Base Ready"})
+        return JSONResponse(content={"status": "success", "message": "file uploaded correctly", "document_id": db_id})
 
     except Exception as e:
         logger.error(f"Error processing file: {str(e)}")
         return JSONResponse(content={"status": "error", "detail": str(e)}, status_code=500)
 
 @app.post("/api/chat")
-async def chat(request: QueryRequest):
+async def chat(request: QueryRequest, space_id: int = Query(1)):
     """Process user query through the chat controller."""
     try:
         result = chat_controller.process_user_query(
             query_text=request.text,
             user_id=1,  # Always use user ID 1 as specified
-            thread_id=request.thread_id
+            thread_id=request.thread_id,
+            space_id=space_id,
         )
         return JSONResponse(content=result)
     except Exception as e:
@@ -128,12 +129,13 @@ async def chat(request: QueryRequest):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @app.post("/api/threads/{thread_id}/branch")
-async def branch_from_message(thread_id: int, request: BranchRequest):
+async def branch_from_message(thread_id: int, request: BranchRequest, space_id: int = Query(1)):
     """Create a branch from a specific message in a thread."""
     try:
         result = chat_controller.process_user_query(
             query_text=request.content,
             user_id=1,  # Always use user ID 1
+            space_id=space_id,
             thread_id=thread_id,
             parent_message_id=request.parent_message_id
         )
@@ -143,22 +145,26 @@ async def branch_from_message(thread_id: int, request: BranchRequest):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 @app.get("/api/documents")
-async def get_documents():
-    """Fetch list of all documents for the sidebar."""
+async def get_documents(space_id: int = Query(1)):
+    """Fetch list of documents for the sidebar. If `space_id` is provided, return documents for that space."""
     try:
-        docs = db_manager.get_all_documents()
+        if space_id is not None:
+            logger.info(f"Fetching documents for space_id={space_id}")
+            # Use the singular compatibility method requested
+            docs = db_manager.get_documents_for_space(space_id)
+
         return JSONResponse(content={"documents": jsonable_encoder(docs)})
     except Exception as e:
-        print("Done got error", str(e))
+        logger.error(f"Error fetching documents: {e}")
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 @app.get("/api/documents/{doc_id}/content")
-async def get_document_content(doc_id: int):
+async def get_document_content(doc_id: int, space_id: int = Query(1)):
     """Stream the PDF file itself."""
     # In a real app, you'd fetch the filename from DB using doc_id to be safe
     # For simplicity, we just look for matching files in storage
-    docs = db_manager.get_all_documents()
+    docs = db_manager.get_documents_for_space(space_id)
     logger.info(f"Requested doc_id: {doc_id}")
     logger.info(f"Available docs: {docs}")
     target_doc = next((d for d in docs if d['id'] == doc_id), None)
@@ -197,9 +203,15 @@ async def get_thread(thread_id: int):
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
-class MessageRequest(BaseModel):
-    content: str
-    user: str = "Anonymous"
+@app.post("/api/spaces")
+async def create_space(request: SpaceCreate):
+    """Create a new workspace/space."""
+    try:
+        space_id = db_manager.create_space(name=request.name, description=request.description)
+        return JSONResponse(content={"status": "success", "space_id": space_id})
+    except Exception as e:
+        logger.error(f"Error creating space: {e}")
+        return JSONResponse(content={"error": str(e)}, status_code=500)
 
 
 @app.post("/api/threads/{thread_id}/messages")
@@ -222,7 +234,15 @@ async def add_message_to_thread(thread_id: int, request: MessageRequest):
     except Exception as e:
         return JSONResponse(content={"error": str(e)}, status_code=500)
 
+@app.get("/api/spaces")
+async def list_spaces():
+    try:
+        spaces = db_manager.get_spaces()
+        return JSONResponse(content={"spaces": jsonable_encoder(spaces)})
+    except Exception as e:
+        logger.error(f"Error fetching spaces: {e}")
 
+    """Return a list of available spaces."""
 # Mount frontend static files (this makes the frontend and backend available on the same port)
 if os.path.isdir(FRONTEND_DIST):
     # Mounting at root will let API routes (/api/...) take precedence and serve files otherwise

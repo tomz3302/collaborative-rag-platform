@@ -15,12 +15,12 @@ class OmarHandlers:
     def __init__(self, db_manager):
         self.db = db_manager
 
-    def ensure_thread(self, user_id: int, query_text: str, thread_id: int = None) -> int:
+    def ensure_thread(self, user_id: int, query_text: str,space_id: int, thread_id: int = None) -> int:
         """Creates a new thread if needed, or validates the existing one."""
         if not thread_id:
             # Create Title from query
             title_snippet = (query_text[:47] + '...') if len(query_text) > 47 else query_text
-            thread_id = self.db.create_thread(title=title_snippet, creator_id=user_id)
+            thread_id = self.db.create_thread(title=title_snippet, creator_id=user_id, space_id=space_id)
             logger.info(f"Created new thread ID: {thread_id}")
             return thread_id
         return thread_id
@@ -74,13 +74,13 @@ class OmarHandlers:
             is_fork_start=False  # AI never starts a fork
         )
 
-    def anchor_thread_to_document(self, thread_id: int, source_filename: str):
+    def anchor_thread_to_document(self, thread_id: int, source_filename: str, space_id: int):
         """Links the thread to the document used by RAG."""
         if not source_filename:
             return
 
         clean_filename = source_filename.replace("temp_", "")
-        doc_id = self.db.get_document_id_by_filename(clean_filename)
+        doc_id = self.db.get_document_id_by_filename(space_id, clean_filename)
 
         if doc_id:
             self.db.link_thread_to_doc(thread_id, doc_id, page_num=1)

@@ -19,46 +19,66 @@ DB_PORT = 3306
 
 TABLES = {}
 
-# 1. DOCUMENTS TABLE (Unchanged)
-TABLES['documents'] = (
+# 1. SPACES TABLE (New)
+# This is the top-level container. Documents and Threads belong here.
+TABLES['spaces'] = (
     """
-    CREATE TABLE IF NOT EXISTS documents (
+    CREATE TABLE IF NOT EXISTS spaces (
         id INT AUTO_INCREMENT PRIMARY KEY,
-        filename VARCHAR(255) NOT NULL,
-        file_type VARCHAR(50),
-        file_data LONGBLOB, 
-        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    ) ENGINE=InnoDB
-    """
-)
-
-# 2. THREADS TABLE (Unchanged)
-TABLES['threads'] = (
-    """
-    CREATE TABLE IF NOT EXISTS threads (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        title VARCHAR(255),
-        creator_user_id INT, 
-        is_public BOOLEAN DEFAULT TRUE,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB
     """
 )
 
-# 3. CONTEXT ANCHORS TABLE (Updated)
-# - Added 'page_number' to support split-screen logic per page.
-# - Updated UNIQUE constraint to include page_number.
+# 2. DOCUMENTS TABLE
+TABLES['documents'] = (
+    """
+    CREATE TABLE IF NOT EXISTS documents (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        space_id INT NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        file_type VARCHAR(50),
+        file_url TEXT, 
+
+        uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+    """
+)
+
+# 3. THREADS TABLE (Updated)
+# Added 'space_id'. A thread lives inside a space.
+# While 'context_anchors' links a thread to a specific document,
+# the thread itself belongs to the Space context.
+TABLES['threads'] = (
+    """
+    CREATE TABLE IF NOT EXISTS threads (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        space_id INT NOT NULL,
+        title VARCHAR(255),
+        creator_user_id INT, 
+        is_public BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+        FOREIGN KEY (space_id) REFERENCES spaces(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB
+    """
+)
+
+# 4. CONTEXT ANCHORS TABLE
+# Connects a Thread to a Document
+# NOTE: Application logic should ensure the Thread and Document belong to the same Space.
 TABLES['context_anchors'] = (
     """
     CREATE TABLE IF NOT EXISTS context_anchors (
         id INT AUTO_INCREMENT PRIMARY KEY,
         thread_id INT NOT NULL,
         document_id INT NOT NULL,
-
-        -- NEW: Defaults to 1 if not specified
         page_number INT DEFAULT 1, 
 
-        -- UPDATED: One thread per page per document
         UNIQUE KEY unique_anchor (thread_id, document_id, page_number),
 
         FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE,
@@ -67,10 +87,7 @@ TABLES['context_anchors'] = (
     """
 )
 
-# 4. MESSAGES TABLE (The "Hybrid" Logic)
-# - Stores 'path' as TEXT for deep nesting.
-# - Stores 'parent_message_id' for future optimization.
-# - Stores 'branch_id' for easy Fork management.
+# 5. MESSAGES TABLE
 TABLES['messages'] = (
     """
     CREATE TABLE IF NOT EXISTS messages (
@@ -79,19 +96,9 @@ TABLES['messages'] = (
         user_id INT NOT NULL, 
         role VARCHAR(20) NOT NULL,
         content TEXT NOT NULL, 
-
-        -- MATERIALIZED PATH: Changed to TEXT to support 6000+ levels of nesting.
-        -- We will index the first 20 chars for speed.
         path TEXT NOT NULL,
-
-        -- PARENT ID: Essential for Data Integrity and future Recursive SQL support.
         parent_message_id INT,
-
-        -- BRANCH ID: 
-        -- NULL = Main Thread (The "Canon" conversation)
-        -- INT = ID of the message where the fork started.
         branch_id INT DEFAULT NULL,
-
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
 
         FOREIGN KEY (thread_id) REFERENCES threads(id) ON DELETE CASCADE,
@@ -102,16 +109,20 @@ TABLES['messages'] = (
     """
 )
 
-# 5. INDEXES (Optimized for the new columns)
+# 6. INDEXES
 INDEXES = [
-    # 1. Fast Path Search: Only indexes the first 20 chars of the TEXT column
+    # Fast Path Search
     "CREATE INDEX idx_messages_path ON messages (path(20));",
 
-    # 2. Fast Branch Lookup: Instantly find 'Main Thread' (NULL) or 'Fork X'
+    # Fast Branch Lookup
     "CREATE INDEX idx_messages_branching ON messages (thread_id, branch_id);",
 
-    # 3. Fast Document/Page Lookup
-    "CREATE INDEX idx_anchors_doc_page ON context_anchors (document_id, page_number);"
+    # Fast Document/Page Lookup
+    "CREATE INDEX idx_anchors_doc_page ON context_anchors (document_id, page_number);",
+
+    # NEW: Fast Space lookups
+    "CREATE INDEX idx_documents_space ON documents (space_id);",
+    "CREATE INDEX idx_threads_space ON threads (space_id);"
 ]
 
 
@@ -131,6 +142,8 @@ def create_tables():
 
         # 1. Create Tables
         logger.info(f"Creating tables in database '{DB_NAME}'...")
+        # Iterating directly isn't guaranteed order in older Python versions,
+        # but in modern Python it inserts order. To be safe, we rely on the define order above.
         for name, ddl in TABLES.items():
             try:
                 logger.info(f"Processing table {name}...")
@@ -140,6 +153,9 @@ def create_tables():
                     logger.warning(f"Table {name} already exists. Skipping.")
                 else:
                     logger.error(f"Error creating table {name}: {err}")
+                    # If a critical table fails, we might want to stop
+                    if name in ['spaces', 'documents', 'threads']:
+                        raise err
 
         # 2. Create Indexes
         logger.info("Creating indexes...")
@@ -163,7 +179,7 @@ def create_tables():
         elif err.errno == errorcode.ER_BAD_DB_ERROR:
             logger.error(f"❌ Database Error: Database '{DB_NAME}' does not exist.")
         else:
-            logger.error(f"❌ Unhandled Database Error: {err}")
+            logger.error(f"❌ Database Error: {err}")
         sys.exit(1)
     finally:
         if cur is not None:
