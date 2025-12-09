@@ -50,7 +50,7 @@ class ChatController:
         # 4. Intelligence (RAG Query)
         # We pass the history we just fetched to the AI
         #######################Delay the history passing for now########################
-        rag_result = self.rag.query(query_text)
+        rag_result = self.rag.query(query_text, space_id=space_id)
 
         ai_text = rag_result.get('answer', "Error processing response.")
         source_doc = rag_result.get('source_document')

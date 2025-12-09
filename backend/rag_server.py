@@ -87,7 +87,7 @@ async def read_root():
 
 
 @app.post("/api/upload")
-async def upload_file(file: UploadFile = File(...)):
+async def upload_file(file: UploadFile = File(...), space_id: int = Query(1)):
     try:
         # Save to PERSISTENT storage, not temp
         file_location = os.path.join(STORAGE_DIR, file.filename)
@@ -98,12 +98,11 @@ async def upload_file(file: UploadFile = File(...)):
         logger.info(f"File stored at: {file_location}")
 
         # 1. Index document in RAG
-        docs = rag_system.load_and_process_pdf(file_location)
+        docs = rag_system.load_and_process_pdf(file_location, space_id)
         rag_system.build_index(docs)
 
         # 2. Add document record to Database using DBManager.add_document
-        # Use default space_id=1 for now; file_url is the relative path to the stored file
-        space_id = 1
+        # Use the space_id from the query parameter
         file_url = file_location  # storing absolute path for now; adjust if using cloud storage
         db_id = db_manager.add_document(space_id=space_id, filename=file.filename, file_type='pdf', file_url=file_url)
 

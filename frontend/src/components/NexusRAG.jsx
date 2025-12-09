@@ -47,7 +47,7 @@ export default function NexusRAG({ spaceId, onExit }) {
     formData.append('file', file);
 
     try {
-        await fetch('/api/upload', { method: 'POST', body: formData });
+        await fetch(`/api/upload?space_id=${spaceId}`, { method: 'POST', body: formData });
         await fetchDocuments();
     } catch(err) {
         console.error("Upload Error", err);
