@@ -34,6 +34,11 @@ export const DocumentInterface = ({
                         <span className="text-xs font-mono opacity-60">ID: {thread.id}</span>
                     </div>
                     <h4 className="font-bold text-lg mb-1">{thread.title}</h4>
+                    {thread.user && (
+                        <div className="text-xs opacity-70 mt-2 font-mono">
+                            Created by: <span className="font-bold">{thread.user}</span>
+                        </div>
+                    )}
                     <div className="flex items-center gap-2 text-xs opacity-60 mt-4 group-hover:opacity-100">
                         <span>Explore</span> <ArrowRight size={12}/>
                     </div>

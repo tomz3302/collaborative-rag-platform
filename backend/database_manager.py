@@ -22,7 +22,7 @@ class DBManager:
         return mysql.connector.connect(**self.config)
 
     # --- THREADS ---
-    def create_thread(self, space_id: int, title: str, creator_id: int = 1) -> int:
+    def create_thread(self, space_id: int, title: str, creator_id: int) -> int:
         """
         Starts a new conversation thread inside a specific Space.
         """
@@ -274,17 +274,21 @@ class DBManager:
             conn.close()
 
     def get_threads_for_document(self, document_id: int) -> List[Dict]:
-        """
-        Retrieves all threads associated with a specific document.
+        """Retrieves all threads associated with a specific document, 
+        resolving the creator's name instead of ID.
         """
         conn = self.get_connection()
         cursor = conn.cursor(dictionary=True)
         try:
+            # Changes made:
+            # 1. Selected 'u.full_name' instead of 't.creator_user_id'
+            # 2. Added 'INNER JOIN users u ON t.creator_user_id = u.id'
             query = """
-                SELECT t.id, t.title, t.creator_user_id, t.created_at,
-                       ca.page_number
+                SELECT t.id, t.title, u.full_name AS user, t.created_at,
+                    ca.page_number
                 FROM threads t
                 INNER JOIN context_anchors ca ON t.id = ca.thread_id
+                INNER JOIN user u ON t.creator_user_id = u.id
                 WHERE ca.document_id = %s
                 ORDER BY ca.page_number ASC, t.created_at DESC
             """
@@ -293,7 +297,6 @@ class DBManager:
         finally:
             cursor.close()
             conn.close()
-
     def create_space(self, name: str, description: str = None) -> int:
         """Creates a new workspace (e.g., 'Legal Team', 'Project Alpha')."""
         conn = self.get_connection()
