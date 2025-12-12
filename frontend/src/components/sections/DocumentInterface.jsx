@@ -1,24 +1,64 @@
-import React from 'react';
-import { FileText, ArrowRight } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { FileText, ArrowRight, Loader } from 'lucide-react';
 
 export const DocumentInterface = ({
   currentDoc,
   docThreads,
   openThreadInMap
 }) => {
+  // 1. State to hold the "Real" Supabase Link
+  const [pdfUrl, setPdfUrl] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // 2. Effect: Whenever the user clicks a document, fetch its real Link
+  useEffect(() => {
+    if (currentDoc) {
+      setLoading(true);
+      fetch(`/api/documents/${currentDoc.id}/content`)
+        .then(res => res.json())
+        .then(data => {
+            // "data.url" is the Supabase link we want
+            setPdfUrl(data.url);
+            setLoading(false);
+        })
+        .catch(err => {
+            console.error("Failed to load PDF url", err);
+            setLoading(false);
+        });
+    } else {
+        setPdfUrl(null);
+    }
+  }, [currentDoc]);
+
   return (
     <div className="w-full h-full flex">
+        {/* LEFT SIDE: PDF VIEWER */}
         <div className="w-1/2 h-full border-r-2 flex items-center justify-center flex-col border-black bg-gray-100">
             {currentDoc ? (
-                <iframe src={`/api/documents/${currentDoc.id}/content`} className="w-full h-full border-none" />
+                loading ? (
+                    // Show spinner while fetching the link
+                    <div className="flex flex-col items-center opacity-50">
+                        <Loader className="animate-spin mb-2" />
+                        <span className="font-mono text-xs">RESOLVING_LINK...</span>
+                    </div>
+                ) : (
+                    // 3. Render the iframe using the REAL Link (pdfUrl)
+                    <iframe 
+                        src={pdfUrl} 
+                        className="w-full h-full border-none" 
+                        title="PDF Viewer"
+                    />
+                )
             ) : (
                 <div className="p-8 border-2 border-dashed border-gray-300 text-gray-400 text-center">
                     <FileText size={48} className="mx-auto mb-4"/>
-                    <p>PDF_RENDERER_MOUNTED</p>
+                    <p className="font-mono text-sm">PDF_RENDERER_MOUNTED</p>
+                    <p className="text-xs mt-2 opacity-50">Select a document to view</p>
                 </div>
             )}
         </div>
 
+        {/* RIGHT SIDE: THREADS (No changes needed here) */}
         <div className="w-1/2 p-0 overflow-y-auto bg-white">
             <div className="h-16 border-b-2 flex items-center px-6 border-black bg-gray-50">
                 <h3 className="text-sm font-bold uppercase tracking-wider">Threads</h3>

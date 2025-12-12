@@ -1,9 +1,11 @@
 import os
+import random
 import sys
 import pickle
+import time
 from typing import List, Dict, Any
-
-
+import tempfile # To create temporary files during download
+import requests
 # --- Libraries ---
 import threading #incase 2 users press indexing at the same time
 from langchain_classic.retrievers import ContextualCompressionRetriever
@@ -170,72 +172,122 @@ class AdvancedRAGSystem:
             return False
 
     #
-    def load_and_process_pdf(self, file_path: str, space_id: int) -> List[Document]:
+    def load_and_process_pdf(self, file_url: str, space_id: int) -> List[Document]:
+        """
+        Downloads PDF from a URL (Supabase), processes it safely with Rate Limiting, and cleans up.
+        """
+        # Extract filename from URL (simple split)
+        filename = file_url.split('/')[-1].split('?')[0] # Handles query params if any
+        print(f"--- Downloading from URL: {file_url} ---")
 
-        filename = os.path.basename(file_path)
-        print(f"--- Fast Processing: {file_path} ---")
+        # 1. Create a temporary file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+            local_temp_path = temp_file.name
 
-        # 1. Fast Extraction (No OCR, takes seconds)
-        loader = PyPDFLoader(file_path)
-        pages = loader.load()
-        full_text = "\n\n".join([p.page_content for p in pages])
+        try:
+            # 2. Download from URL to temp file
+            response = requests.get(file_url, stream=True)
+            response.raise_for_status() # Check for errors
+            
+            with open(local_temp_path, 'wb') as f:
+                for chunk in response.iter_content(chunk_size=8192):
+                    f.write(chunk)
 
-        # 2. Splitting
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CHUNK_SIZE,
-            chunk_overlap=CHUNK_OVERLAP
-        )
+            # 3. Fast Extraction (Standard PyPDFLoader reading the temp file)
+            print(f"Processing local temp file: {local_temp_path}")
+            loader = PyPDFLoader(local_temp_path)
+            pages = loader.load()
+            full_text = "\n\n".join([p.page_content for p in pages])
 
-        raw_docs = text_splitter.create_documents([full_text])
-        print(f"Created {len(raw_docs)} raw chunks.")
+            # 4. Splitting
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP
+            )
 
-        # --- CRITICAL CHANGE: INJECT METADATA ---
-        for doc in raw_docs:
-            doc.metadata['source_document'] = filename
-            doc.metadata['space_id'] = space_id
+            raw_docs = text_splitter.create_documents([full_text])
+            print(f"Created {len(raw_docs)} raw chunks.")
 
+            # --- METADATA INJECTION ---
+            for doc in raw_docs:
+                doc.metadata['source_document'] = filename
+                doc.metadata['space_id'] = space_id
+                doc.metadata['file_url'] = file_url
 
-        # 3. Contextual Embedding Pre-processing
-        print("Generating Contextual Embeddings...")
+            # 5. Contextual Embedding (With Rate Limiting)
+            print("Generating Contextual Embeddings...")
+            print("Note: This will take time to respect Groq rate limits.")
+          
+            # Limit context to first 30k chars to avoid blowing up the prompt size
+            document_context_str = full_text[:30000]
+            contextualized_docs = []
+            
+            context_prompt = ChatPromptTemplate.from_template(
+                """<document>{doc_context}</document>
+                   Here is a chunk of text: <chunk>{chunk_content}</chunk>
+                   Briefly explain the context of this chunk within the document."""
+            )
+            chain = context_prompt | self.contextualizer_llm | StrOutputParser()
+            
+            # --- THE LOOP ---
+            for i, doc in enumerate(raw_docs):
+                
+                # A. Mandatory Sleep to prevent hitting 60 RPM limit
+                time.sleep(1.0) 
 
-        # We limit the context to the first 30,000 chars to fit in the fast LLM window
-        document_context_str = full_text[:30000]
+                retries = 3
+                success = False
+                
+                while retries > 0 and not success:
+                    try:
+                        chunk_context = chain.invoke({
+                            "doc_context": document_context_str,
+                            "chunk_content": doc.page_content
+                        })
+                        combined_content = f"Context: {chunk_context}\n\nContent: {doc.page_content}"
+                        new_doc = Document(page_content=combined_content, metadata=doc.metadata)
+                        
+                        # Persist metadata
+                        new_doc.metadata['original_content'] = doc.page_content
+                        contextualized_docs.append(new_doc)
+                        
+                        # Progress bar effect
+                        print(f"Processed chunk {i + 1}/{len(raw_docs)}...", end='\r')
+                        success = True
 
-        contextualized_docs = []
+                    except Exception as e:
+                        error_msg = str(e)
+                        # Check for Rate Limit errors (429)
+                        if "429" in error_msg or "rate limit" in error_msg.lower():
+                            wait_time = 10 + random.randint(1, 5)
+                            print(f"\nRate Limit Hit on chunk {i}! Sleeping {wait_time}s...")
+                            time.sleep(wait_time)
+                            retries -= 1
+                        else:
+                            # If it's a different error (e.g., content filter), just skip context
+                            print(f"\nError on chunk {i}: {e}. Skipping context.")
+                            contextualized_docs.append(doc) # Fallback to raw doc
+                            success = True
 
-        context_prompt = ChatPromptTemplate.from_template(
-            """<document>
-            {doc_context}
-            </document>
-            Here is a chunk of text:
-            <chunk>
-            {chunk_content}
-            </chunk>
-            Briefly explain the context of this chunk within the document."""
-        )
+                # If we failed after 3 retries, just append the raw doc to avoid losing data
+                if not success:
+                     contextualized_docs.append(doc)
 
-        chain = context_prompt | self.contextualizer_llm | StrOutputParser()
-
-        # We will only contextualize the first 20 chunks to keep the demo fast.
-        # If you want the WHOLE book contextualized, remove the 'if i < 20' check.
-        for i, doc in enumerate(raw_docs):
-
-            try:
-                    chunk_context = chain.invoke({
-                        "doc_context": document_context_str,
-                        "chunk_content": doc.page_content
-                    })
-                    combined_content = f"Context: {chunk_context}\n\nContent: {doc.page_content}"
-                    new_doc = Document(page_content=combined_content, metadata=doc.metadata)
-                    # Save original content for display
-                    new_doc.metadata['original_content'] = doc.page_content
-                    contextualized_docs.append(new_doc)
-                    print(f"Contextualized chunk {i + 1}...", end='\r')
-            except:
-                    contextualized_docs.append(doc)
-
-        return contextualized_docs
-
+            print(f"\nProcessing Complete. {len(contextualized_docs)} chunks ready.")
+            return contextualized_docs
+        except Exception as e:
+            print(f"Error processing {filename}: {e}")
+            return []
+            
+        finally:
+            # 6. Cleanup
+            if os.path.exists(local_temp_path):
+                try:
+                    os.remove(local_temp_path)
+                    print("Temp file cleaned up.")
+                except:
+                    pass
+                
     def build_index(self, documents: List[Document]):
         with self.index_lock:
             """
