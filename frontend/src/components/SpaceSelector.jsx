@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Plus, ArrowRight, Folder, Terminal, Loader2 } from 'lucide-react';
-import { cn } from './lib/utils'; // Assuming this exists from previous refactor
+import { cn } from './lib/utils';
+import { apiFetch } from '../utils/api';
 
 export default function SpaceSelector({ onSelectSpace }) {
   const [spaces, setSpaces] = useState([]);
@@ -19,7 +20,7 @@ export default function SpaceSelector({ onSelectSpace }) {
 
   const fetchSpaces = async () => {
     try {
-      const res = await fetch('/api/spaces');
+      const res = await apiFetch('/api/spaces');
       const data = await res.json();
       setSpaces(data.spaces || []);
     } catch (err) {
@@ -35,9 +36,8 @@ export default function SpaceSelector({ onSelectSpace }) {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/spaces', {
+      const res = await apiFetch('/api/spaces', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: newSpaceName,
           description: newSpaceDesc
@@ -67,8 +67,8 @@ export default function SpaceSelector({ onSelectSpace }) {
         <div className="inline-flex items-center justify-center w-16 h-16 bg-black text-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
             <Box size={32} />
         </div>
-        <h1 className="text-4xl font-black tracking-tighter">NEXUS_OS</h1>
-        <p className="opacity-60 text-sm">SELECT_WORKSPACE_TO_INITIALIZE</p>
+        <h1 className="text-4xl font-black tracking-tighter">Clark</h1>
+        <p className="opacity-60 text-sm">SELECT_SPACE_TO_VIEW</p>
       </div>
 
       {/* MAIN GRID */}

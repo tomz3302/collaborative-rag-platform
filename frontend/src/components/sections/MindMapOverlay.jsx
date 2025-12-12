@@ -4,6 +4,7 @@ import { Minimize2, ArrowRight, GitBranch } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { MindMapCard } from '../ui/MindMapCard';
 import { PixelLoader } from '../ui/PixelLoader';
+import ReactMarkdown from 'react-markdown';
 
 export const MindMapOverlay = ({
   isOpen,
@@ -26,7 +27,7 @@ export const MindMapOverlay = ({
                 <div className="h-20 flex items-center justify-between px-8 border-b-2 bg-white border-black">
                     <div className="flex items-center gap-4">
                         <div className="px-3 py-1 text-sm font-bold uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)] bg-black text-white">
-                            Mind_Map_View
+                            DETAILS
                         </div>
                         <div className="h-px w-12 bg-black"></div>
                         <span className="font-mono text-sm opacity-60">Exploring Logic Branch</span>
@@ -79,7 +80,9 @@ export const MindMapOverlay = ({
                                             <div className="text-[10px] font-bold uppercase mb-2 opacity-50">
                                                 {msg.role === 'assistant' ? "System_Output" : "User_Input"}
                                             </div>
-                                            {msg.content}
+                                            <div className={cn("prose max-w-none", msg.role === 'user' ? "prose-invert" : "")}>
+                                                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                            </div>
                                         </div>
 
                                         {/* DIG DEEPER ACTION */}

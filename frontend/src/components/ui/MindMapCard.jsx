@@ -10,7 +10,7 @@ export const MindMapCard = ({ title, children, onClose, isRoot, isTemp }) => (
     animate={{ opacity: 1, x: 0, scale: 1 }}
     exit={{ opacity: 0, scale: 0.9 }}
     className={cn(
-      "flex-shrink-0 w-[400px] max-h-[80vh] flex flex-col overflow-hidden transition-colors duration-200",
+      "flex-shrink-0 w-[600px] max-h-[90vh] flex flex-col overflow-hidden transition-colors duration-200",
       "border-2 bg-white text-black border-black shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
     )}
   >

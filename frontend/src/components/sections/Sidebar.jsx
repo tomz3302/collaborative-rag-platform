@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Terminal, FileText, Upload, Loader2 } from 'lucide-react';
+import { Box, Terminal, FileText, Upload, Loader2, LogOut } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const Sidebar = ({
@@ -9,7 +9,8 @@ export const Sidebar = ({
   currentDoc,
   openDocument,
   isUploading,
-  handleFileUpload
+  handleFileUpload,
+  onExit
 }) => {
   return (
     <nav className="w-20 lg:w-64 border-r-2 flex flex-col border-black bg-gray-50">
@@ -17,7 +18,7 @@ export const Sidebar = ({
         <div className="w-8 h-8 flex items-center justify-center border shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] bg-black text-white border-black">
           <Box size={18} />
         </div>
-        <span className="font-bold text-lg hidden lg:block tracking-tight">NEXUS_API</span>
+        <span className="font-bold text-lg hidden lg:block tracking-tight">Clark</span>
       </div>
 
       <div className="px-4 py-6 space-y-4 flex flex-col h-full">
@@ -53,9 +54,18 @@ export const Sidebar = ({
           {/* Upload Button */}
           <label className="mt-auto flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed cursor-pointer transition-colors border-gray-400 text-gray-500 hover:border-black hover:text-black hover:bg-white">
               {isUploading ? <Loader2 className="animate-spin" size={16}/> : <Upload size={16} />}
-              <span className="text-sm font-bold">UPLOAD_PDF</span>
+              <span className="text-sm font-bold hidden lg:block">UPLOAD_PDF</span>
               <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} />
           </label>
+
+          {/* Exit Button */}
+          <button 
+            onClick={onExit}
+            className="flex items-center justify-center gap-2 w-full py-3 border-2 border-black bg-white text-black hover:bg-red-50 hover:border-red-500 hover:text-red-500 transition-colors font-bold text-sm shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-[2px] active:translate-y-[2px] active:shadow-none"
+          >
+            <LogOut size={16} />
+            <span className="hidden lg:block">EXIT_SPACE</span>
+          </button>
       </div>
     </nav>
   );

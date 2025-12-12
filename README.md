@@ -116,7 +116,11 @@ Build a collaborative learning environment where:
    - `mysql-connector-python`
    - `sentence-transformers`
    - `rank_bm25`
-
+   - `aiomysql`
+   - `cryptography`
+   - `fastapi-users-db-sqlalchemy`
+   - `fastapi-users`
+   - `fastapi-mail`
 3. **Set up environment variables**
    ```bash
    # Windows PowerShell

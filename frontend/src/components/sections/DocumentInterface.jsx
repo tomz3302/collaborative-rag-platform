@@ -21,7 +21,7 @@ export const DocumentInterface = ({
 
         <div className="w-1/2 p-0 overflow-y-auto bg-white">
             <div className="h-16 border-b-2 flex items-center px-6 border-black bg-gray-50">
-                <h3 className="text-sm font-bold uppercase tracking-wider">Active Threads</h3>
+                <h3 className="text-sm font-bold uppercase tracking-wider">Threads</h3>
             </div>
             {docThreads.length === 0 && (
                 <div className="p-8 text-center opacity-50 font-mono text-sm">NO_THREADS_FOUND</div>
@@ -35,7 +35,7 @@ export const DocumentInterface = ({
                     </div>
                     <h4 className="font-bold text-lg mb-1">{thread.title}</h4>
                     <div className="flex items-center gap-2 text-xs opacity-60 mt-4 group-hover:opacity-100">
-                        <span>OPEN_MIND_MAP</span> <ArrowRight size={12}/>
+                        <span>Explore</span> <ArrowRight size={12}/>
                     </div>
                 </div>
             ))}

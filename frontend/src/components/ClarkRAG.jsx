@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { cn } from './lib/utils';
+import { apiFetch } from '../utils/api';
 
 // Component Imports
 import { Sidebar } from './sections/Sidebar';
@@ -7,7 +9,10 @@ import { ChatInterface } from './sections/ChatInterface';
 import { DocumentInterface } from './sections/DocumentInterface';
 import { MindMapOverlay } from './sections/MindMapOverlay';
 
-export default function NexusRAG({ spaceId, onExit }) {
+export default function ClarkRAG() {
+  const { spaceId } = useParams();
+  const navigate = useNavigate();
+
   // --- STATE ---
   const [view, setView] = useState('chat'); // 'chat' | 'document'
   const [documents, setDocuments] = useState([]);
@@ -28,11 +33,18 @@ export default function NexusRAG({ spaceId, onExit }) {
   const [mapColumns, setMapColumns] = useState([]);
 
   // --- API FETCHING ---
-  useEffect(() => { fetchDocuments(); }, []);
+  useEffect(() => { 
+      if (spaceId) fetchDocuments(); 
+  }, [spaceId]);
+
+  const handleExit = () => {
+      localStorage.removeItem('activeSpaceId');
+      navigate('/');
+  };
 
   const fetchDocuments = async () => {
     try {
-      const res = await fetch(`/api/documents?space_id=${spaceId}`);
+      const res = await apiFetch(`/api/documents?space_id=${spaceId}`);
       const data = await res.json();
       setDocuments(data.documents || []);
     } catch (err) { console.error("API Error", err); }
@@ -47,7 +59,7 @@ export default function NexusRAG({ spaceId, onExit }) {
     formData.append('file', file);
 
     try {
-        await fetch(`/api/upload?space_id=${spaceId}`, { method: 'POST', body: formData });
+        await apiFetch(`/api/upload?space_id=${spaceId}`, { method: 'POST', body: formData });
         await fetchDocuments();
     } catch(err) {
         console.error("Upload Error", err);
@@ -61,7 +73,7 @@ export default function NexusRAG({ spaceId, onExit }) {
     setView('document');
     setDocThreads([]);
     try {
-        const res = await fetch(`/api/documents/${doc.id}/threads?space_id=${spaceId}`);
+        const res = await apiFetch(`/api/documents/${doc.id}/threads?space_id=${spaceId}`);
         const data = await res.json();
         setDocThreads(data.threads || []);
     } catch (err) { console.error(err); }
@@ -80,13 +92,11 @@ export default function NexusRAG({ spaceId, onExit }) {
     setIsChatLoading(true);
 
     try {
-        const res = await fetch(`/api/chat?space_id=${spaceId}`, {
+        const res = await apiFetch(`/api/chat?space_id=${spaceId}`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 text,
-                thread_id: generalThreadId,
-                user_id: 1
+                thread_id: generalThreadId
             })
         });
         const data = await res.json();
@@ -113,7 +123,7 @@ export default function NexusRAG({ spaceId, onExit }) {
     setMapColumns([]);
 
     try {
-        const res = await fetch(`/api/threads/${threadSummary.id}`);
+        const res = await apiFetch(`/api/threads/${threadSummary.id}`);
         const data = await res.json();
         setMapColumns([data.thread]);
     } catch (err) { console.error(err); }
@@ -155,26 +165,22 @@ export default function NexusRAG({ spaceId, onExit }) {
 
         if (currentColumn.isTempBranch) {
             // New Branch
-            const res = await fetch(`/api/threads/${currentColumn.sourceThreadId}/branch?space_id=${spaceId}`, {
+            const res = await apiFetch(`/api/threads/${currentColumn.sourceThreadId}/branch?space_id=${spaceId}`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     content: text,
-                    parent_message_id: currentColumn.parentMessageId,
-                    user_id: 1
+                    parent_message_id: currentColumn.parentMessageId
                 })
             });
             responseData = await res.json();
             newThreadId = responseData.thread_id;
         } else {
             // Existing Thread
-            const res = await fetch('/api/chat', {
+            const res = await apiFetch(`/api/chat?space_id=${spaceId}`, {
                  method: 'POST',
-                 headers: { 'Content-Type': 'application/json' },
                  body: JSON.stringify({
                      text: text,
-                     thread_id: currentColumn.id,
-                     user_id: 1
+                     thread_id: currentColumn.id
                  })
             });
             responseData = await res.json();
@@ -232,6 +238,7 @@ export default function NexusRAG({ spaceId, onExit }) {
             openDocument={openDocument}
             isUploading={isUploading}
             handleFileUpload={handleFileUpload}
+            onExit={handleExit}
           />
 
           {/* MAIN CONTENT AREA */}

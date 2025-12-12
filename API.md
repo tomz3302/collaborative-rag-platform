@@ -1,4 +1,4 @@
-# Nexus RAG API Reference
+# Clark RAG API Reference
 
 Complete API documentation for the Collaborative RAG Platform backend server.
 
@@ -9,11 +9,346 @@ Complete API documentation for the Collaborative RAG Platform backend server.
 ---
 
 ## Table of Contents
-1. [Upload API](#upload-api)
-2. [Chat APIs](#chat-apis)
-3. [Document APIs](#document-apis)
-4. [Thread APIs](#thread-apis)
-5. [Space APIs](#space-apis)
+1. [Authentication & Users](#authentication--users)
+2. [Upload API](#upload-api)
+3. [Chat APIs](#chat-apis)
+4. [Document APIs](#document-apis)
+5. [Thread APIs](#thread-apis)
+6. [Space APIs](#space-apis)
+
+---
+
+## Authentication & Users
+
+The API uses JWT (JSON Web Tokens) for authentication. Protected routes require the `Authorization` header with a Bearer token.
+
+### POST /auth/register
+Create a new user account.
+
+**Endpoint:** `POST /auth/register`
+
+**Auth Required:** No
+
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "email": "student@alexu.edu.eg",
+  "password": "securepassword123",
+  "full_name": "Omar Ahmed",
+  "is_active": true,
+  "is_superuser": false,
+  "is_verified": false
+}
+```
+
+**Request Schema:**
+- `email` (string, required): Valid email address
+- `password` (string, required): Password (minimum 8 characters)
+- `full_name` (string, optional): User's full name
+- `is_active` (boolean, optional, default: true): Account active status
+- `is_superuser` (boolean, optional, default: false): Superuser privileges
+- `is_verified` (boolean, optional, default: false): Email verification status
+
+**Success Response (201 Created):**
+```json
+{
+  "id": 1,
+  "email": "student@alexu.edu.eg",
+  "is_active": true,
+  "is_superuser": false,
+  "is_verified": false,
+  "full_name": "Omar Ahmed"
+}
+```
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "detail": "REGISTER_USER_ALREADY_EXISTS"
+}
+```
+or
+```json
+{
+  "detail": "REGISTER_INVALID_PASSWORD"
+}
+```
+
+**Common Error Codes:**
+- `REGISTER_USER_ALREADY_EXISTS`: A user with this email already exists
+- `REGISTER_INVALID_PASSWORD`: Password doesn't meet requirements (min 8 characters)
+
+**Example (PowerShell):**
+```powershell
+curl -X POST http://localhost:8000/auth/register `
+  -H "Content-Type: application/json" `
+  -d '{"email":"student@alexu.edu.eg","password":"securepass123","full_name":"Omar Ahmed"}'
+```
+
+**Example (JavaScript/Fetch):**
+```javascript
+const response = await fetch('/auth/register', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'student@alexu.edu.eg',
+    password: 'securepass123',
+    full_name: 'Omar Ahmed'
+  })
+});
+const user = await response.json();
+```
+
+---
+
+### POST /auth/jwt/login
+Authenticate and receive an access token.
+
+**Endpoint:** `POST /auth/jwt/login`
+
+**Auth Required:** No
+
+**Content-Type:** `application/x-www-form-urlencoded`
+
+**Request Body (Form Data):**
+- `username` (string, required): User's email address (field name is "username" but send email)
+- `password` (string, required): User's password
+
+**Success Response (200 OK):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "token_type": "bearer"
+}
+```
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "detail": "LOGIN_BAD_CREDENTIALS"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+curl -X POST http://localhost:8000/auth/jwt/login `
+  -H "Content-Type: application/x-www-form-urlencoded" `
+  -d "username=student@alexu.edu.eg&password=securepass123"
+```
+
+**Example (JavaScript/Fetch):**
+```javascript
+const formData = new URLSearchParams();
+formData.append('username', 'student@alexu.edu.eg');
+formData.append('password', 'securepass123');
+
+const response = await fetch('/auth/jwt/login', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  body: formData
+});
+const { access_token } = await response.json();
+// Store token for subsequent requests
+localStorage.setItem('token', access_token);
+```
+
+**Notes:**
+- Save the `access_token` - you'll need it for protected endpoints
+- Token should be sent in the `Authorization: Bearer <token>` header
+- Tokens may have expiration times (check your server configuration)
+
+---
+
+### POST /auth/jwt/logout
+Invalidate the current session token.
+
+**Endpoint:** `POST /auth/jwt/logout`
+
+**Auth Required:** Yes
+
+**Headers:**
+- `Authorization: Bearer <access_token>`
+
+**Success Response (204 No Content):**
+Empty response body.
+
+**Error Response (401 Unauthorized):**
+```json
+{
+  "detail": "Unauthorized"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+curl -X POST http://localhost:8000/auth/jwt/logout `
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Example (JavaScript/Fetch):**
+```javascript
+const token = localStorage.getItem('token');
+await fetch('/auth/jwt/logout', {
+  method: 'POST',
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+localStorage.removeItem('token');
+```
+
+**Notes:**
+- For stateless JWT, this is mainly for frontend cleanup
+- Remove the token from local storage after logout
+
+---
+
+### POST /auth/request-verify-token
+Request email verification token.
+
+**Endpoint:** `POST /auth/request-verify-token`
+
+**Auth Required:** No
+
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "email": "student@alexu.edu.eg"
+}
+```
+
+**Success Response (202 Accepted):**
+```json
+{
+  "message": "Verification email sent"
+}
+```
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "detail": "User not found or already verified"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+curl -X POST http://localhost:8000/auth/request-verify-token `
+  -H "Content-Type: application/json" `
+  -d '{"email":"student@alexu.edu.eg"}'
+```
+
+**Example (JavaScript/Fetch):**
+```javascript
+await fetch('/auth/request-verify-token', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    email: 'student@alexu.edu.eg'
+  })
+});
+```
+
+**Notes:**
+- Sends verification email to the user
+- Email contains a link or token to verify the account
+- Check spam folder if email doesn't arrive
+
+---
+
+### POST /auth/verify
+Verify email with token.
+
+**Endpoint:** `POST /auth/verify`
+
+**Auth Required:** No
+
+**Content-Type:** `application/json`
+
+**Request Body:**
+```json
+{
+  "token": "verification-token-from-email"
+}
+```
+
+**Success Response (200 OK):**
+```json
+{
+  "id": 1,
+  "email": "student@alexu.edu.eg",
+  "is_active": true,
+  "is_superuser": false,
+  "is_verified": true,
+  "full_name": "Omar Ahmed"
+}
+```
+
+**Error Response (400 Bad Request):**
+```json
+{
+  "detail": "VERIFY_USER_BAD_TOKEN"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+curl -X POST http://localhost:8000/auth/verify `
+  -H "Content-Type: application/json" `
+  -d '{"token":"abc123..."}'
+```
+
+---
+
+### GET /users/me
+Get current authenticated user information.
+
+**Endpoint:** `GET /users/me`
+
+**Auth Required:** Yes
+
+**Headers:**
+- `Authorization: Bearer <access_token>`
+
+**Success Response (200 OK):**
+```json
+{
+  "id": 1,
+  "email": "student@alexu.edu.eg",
+  "is_active": true,
+  "is_superuser": false,
+  "is_verified": true,
+  "full_name": "Omar Ahmed"
+}
+```
+
+**Error Response (401 Unauthorized):**
+```json
+{
+  "detail": "Unauthorized"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+curl http://localhost:8000/users/me `
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+**Example (JavaScript/Fetch):**
+```javascript
+const token = localStorage.getItem('token');
+const response = await fetch('/users/me', {
+  headers: {
+    'Authorization': `Bearer ${token}`
+  }
+});
+const user = await response.json();
+```
 
 ---
 
@@ -23,6 +358,8 @@ Complete API documentation for the Collaborative RAG Platform backend server.
 Upload a PDF document to the knowledge base and index it for RAG queries.
 
 **Endpoint:** `POST /api/upload`
+
+**Auth Required:** Yes (Bearer token)
 
 **Content-Type:** `multipart/form-data`
 
@@ -78,6 +415,8 @@ const data = await response.json();
 Send a query to the RAG system and get an AI-generated response with sources.
 
 **Endpoint:** `POST /api/chat`
+
+**Auth Required:** Yes (Bearer token)
 
 **Content-Type:** `application/json`
 
@@ -148,6 +487,8 @@ Create a branch (fork) from a specific message in a conversation thread.
 
 **Endpoint:** `POST /api/threads/{thread_id}/branch`
 
+**Auth Required:** Yes (Bearer token)
+
 **Content-Type:** `application/json`
 
 **Path Parameters:**
@@ -207,6 +548,8 @@ curl -X POST "http://localhost:8000/api/threads/5/branch?space_id=1" `
 Retrieve a list of all documents or documents for a specific space.
 
 **Endpoint:** `GET /api/documents`
+
+**Auth Required:** Yes (Bearer token)
 
 **Query Parameters:**
 - `space_id` (int, optional): Filter documents by space ID
@@ -269,6 +612,8 @@ Stream/download the PDF file content.
 
 **Endpoint:** `GET /api/documents/{doc_id}/content`
 
+**Auth Required:** Yes (Bearer token)
+
 **Path Parameters:**
 - `doc_id` (int, required): The document ID
 
@@ -311,6 +656,8 @@ curl http://localhost:8000/api/documents/1/content -o document.pdf
 Get all conversation threads associated with a specific document.
 
 **Endpoint:** `GET /api/documents/{doc_id}/threads`
+
+**Auth Required:** Yes (Bearer token)
 
 **Path Parameters:**
 - `doc_id` (int, required): The document ID
@@ -362,6 +709,8 @@ curl http://localhost:8000/api/documents/1/threads
 Retrieve a conversation thread with all its messages.
 
 **Endpoint:** `GET /api/threads/{thread_id}`
+
+**Auth Required:** Yes (Bearer token)
 
 **Path Parameters:**
 - `thread_id` (int, required): The thread ID
@@ -434,6 +783,8 @@ Add a new message to an existing thread.
 
 **Endpoint:** `POST /api/threads/{thread_id}/messages`
 
+**Auth Required:** Yes (Bearer token)
+
 **Path Parameters:**
 - `thread_id` (int, required): The thread ID
 
@@ -486,6 +837,8 @@ curl -X POST http://localhost:8000/api/threads/1/messages `
 Create a new workspace/space for organizing documents and threads.
 
 **Endpoint:** `POST /api/spaces`
+
+**Auth Required:** Yes (Bearer token)
 
 **Content-Type:** `application/json`
 
@@ -548,6 +901,8 @@ console.log('Created space:', data.space_id);
 Retrieve all available spaces/workspaces.
 
 **Endpoint:** `GET /api/spaces`
+
+**Auth Required:** Yes (Bearer token)
 
 **Success Response (200):**
 ```json
@@ -702,6 +1057,7 @@ Error responses include an `error` or `detail` field with a description:
 
 ---
 
-**Last Updated**: December 8, 2025
+**Last Updated**: December 10, 2025
+
 
 

@@ -1,24 +1,47 @@
-import React, { useState } from 'react';
-import SpaceSelector from './components/SpaceSelector';
-import NexusRAG from './components/NexusRAG'; // Your main app file
+import { Routes, Route, Navigate } from 'react-router-dom';
+import { AuthProvider } from './context/AuthContext';
+import ProtectedRoute from './components/ProtectedRoute';
+
+// Pages
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import VerifyEmailPage from './pages/VerifyEmailPage';
+import Dashboard from './pages/Dashboard';
+import ClarkRAG from './components/ClarkRAG';
 
 function App() {
-  // If null, we show the selector. If set, we show the app.
-  const [activeSpaceId, setActiveSpaceId] = useState(null);
-
-  // Function to log out/exit space (optional, pass to NexusRAG if you want a "Back" button)
-  const exitSpace = () => setActiveSpaceId(null);
-
   return (
-    <div>
-      {!activeSpaceId ? (
-        // 1. Show Selector if no ID
-        <SpaceSelector onSelectSpace={(id) => setActiveSpaceId(id)} />
-      ) : (
-        // 2. Show Main App if ID exists, passing the ID as a prop
-        <NexusRAG spaceId={activeSpaceId} onExit={exitSpace} />
-      )}
-    </div>
+    <AuthProvider>
+      <Routes>
+        {/* Public Routes */}
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/verify" element={<VerifyEmailPage />} />
+
+        {/* Protected Route: The Dashboard (Space Selector) */}
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Protected Route: Specific Space (ClarkRAG) */}
+        <Route
+          path="/space/:spaceId"
+          element={
+            <ProtectedRoute>
+              <ClarkRAG />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Catch-all: Redirect unknown URLs to home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </AuthProvider>
   );
 }
 

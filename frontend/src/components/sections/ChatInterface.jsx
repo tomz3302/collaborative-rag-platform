@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Terminal, ArrowRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { PixelLoader } from '../ui/PixelLoader';
+import ReactMarkdown from 'react-markdown';
 
 export const ChatInterface = ({
   messages,
@@ -31,10 +32,12 @@ export const ChatInterface = ({
                     )}>
                         {msg.role === 'assistant' && (
                             <div className="mb-2 text-xs font-bold uppercase tracking-wider opacity-50 flex items-center gap-2">
-                                <Terminal size={12}/> API_RESPONSE
+                                <Terminal size={12}/> RESPONSE
                             </div>
                         )}
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap font-sans">{msg.content}</p>
+                        <div className={cn("text-sm leading-relaxed font-sans prose max-w-none", msg.role === 'user' ? "prose-invert" : "")}>
+                            <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
                         {msg.source && (
                             <div className="mt-4 pt-4 border-t border-dashed border-gray-400">
                                 <div className="text-xs font-mono opacity-60">SOURCE: {msg.source}</div>
