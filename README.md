@@ -123,6 +123,8 @@ Build a collaborative learning environment where:
    - `fastapi-mail`
    - `supabase`
    - `requests`
+   - `langchain-chroma`
+   - `chromadb`
 3. **Set up environment variables**
    ```bash
    # Windows PowerShell
@@ -401,13 +403,60 @@ This is currently an experimental project. Contributions, ideas, and feedback ar
 ## Project Structure
 
 ```
-PythonProject2/
-├── advanced_rag.py       # Core RAG system implementation
-├── rag_server.py         # FastAPI web server
-├── static/
-│   └── index.html        # Web UI
-├── __pycache__/          # Python cache files
-└── README.md             # This file
+CollaborativeRAGPlatform/
+├── backend/
+│   ├── rag_server.py              # Main FastAPI application with router mounting
+│   ├── advanced_rag.py            # Core RAG system implementation
+│   ├── database_manager.py        # Database operations (MySQL)
+│   ├── database_setup.py          # Database schema initialization
+│   ├── db.py                      # SQLAlchemy async models for auth
+│   ├── users.py                   # FastAPI-Users configuration
+│   ├── schemas.py                 # Pydantic schemas for auth
+│   ├── dependencies.py            # Shared dependencies
+│   ├── routers/
+│   │   ├── chat.py                # Chat and thread endpoints
+│   │   ├── documents.py           # Document upload/retrieval
+│   │   └── spaces.py              # Workspace management
+│   ├── embeddings/
+│   │   └── faiss_index/           # Persisted vector embeddings
+│   └── static/
+│       └── index.html             # Legacy web UI
+│
+├── frontend/
+│   ├── src/
+│   │   ├── main.jsx               # React entry point
+│   │   ├── app.jsx                # Main app with routing
+│   │   ├── index.css              # Global styles
+│   │   ├── components/
+│   │   │   ├── NexusRAG.jsx       # Main RAG interface
+│   │   │   ├── SpaceSelector.jsx  # Workspace selector
+│   │   │   ├── ProtectedRoute.jsx # Auth guard
+│   │   │   ├── sections/
+│   │   │   │   ├── ChatInterface.jsx
+│   │   │   │   ├── DocumentInterface.jsx
+│   │   │   │   ├── MindMapOverlay.jsx
+│   │   │   │   └── Sidebar.jsx
+│   │   │   └── ui/
+│   │   │       ├── MindMapCard.jsx
+│   │   │       └── PixelLoader.jsx
+│   │   ├── pages/
+│   │   │   ├── LoginPage.jsx
+│   │   │   ├── RegisterPage.jsx
+│   │   │   ├── VerifyEmailPage.jsx
+│   │   │   └── Dashboard.jsx
+│   │   ├── context/
+│   │   │   └── AuthContext.jsx    # Auth state management
+│   │   └── utils/
+│   │       ├── api.js             # Centralized API fetch wrapper
+│   │       └── utils.js
+│   ├── package.json
+│   ├── vite.config.js             # Vite config with proxy
+│   ├── tailwind.config.js         # Tailwind + typography plugin
+│   └── postcss.config.js
+│
+├── API.md                         # API documentation
+├── README.md                      # This file
+└── README-SETUP.md                # Setup instructions
 ```
 
 ---

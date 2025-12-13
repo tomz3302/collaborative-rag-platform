@@ -19,14 +19,22 @@ logger = logging.getLogger("RAG_Server")
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 FRONTEND_DIST = os.path.join(BASE_DIR, "frontend", "dist")
 
-# Lifespan event to create Auth Tables on startup
+# Lifespan event to create Auth Tables on startup and cleanup on shutdown
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 1. Create the Auth Tables (Users) if they don't exist
+    # Startup: Create the Auth Tables (Users) if they don't exist
     from db import engine, Base
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    yield
+    
+    logger.info("Application started successfully")
+    
+    yield  # Server runs here
+    
+    # Shutdown: Close database connections gracefully
+    logger.info("Shutting down gracefully...")
+    await engine.dispose()
+    logger.info("Database connections closed")
 
 # --- FastAPI App ---
 app = FastAPI(title="Clark", lifespan=lifespan)

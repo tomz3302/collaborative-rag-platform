@@ -15,3 +15,5 @@ package-lock.json
 storage/
 backend/embeddings/
 backend/storage/
+backend/bm25_data
+backend/chroma_db

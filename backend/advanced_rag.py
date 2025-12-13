@@ -14,6 +14,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
+from langchain_chroma import Chroma
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -50,7 +51,8 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 TOP_K_RETRIEVAL = 15  # Fetch more for hybrid search
 TOP_K_RERANK = 5      # Final number of docs to LLM
-EMBEDDINGS_DIR = "embeddings"  # Directory to store vector embeddings
+PERSIST_DIRECTORY = "chroma_db" 
+BM25_DATA_DIR = "bm25_data"
 
 class AdvancedRAGSystem:
     def __init__(self):
@@ -58,7 +60,7 @@ class AdvancedRAGSystem:
         self.index_lock = threading.Lock() # Create a lock for indexing operations
         
         # Create embeddings directory if it doesn't exist
-        os.makedirs(EMBEDDINGS_DIR, exist_ok=True)
+        os.makedirs(BM25_DATA_DIR, exist_ok=True)
         
         # 1. Initialize LLMs
         # Main LLM for Generation
@@ -100,78 +102,101 @@ class AdvancedRAGSystem:
         self.reranker_model = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-base")
         self.compressor = CrossEncoderReranker(model=self.reranker_model, top_n=TOP_K_RERANK)
 
-        self.vectorstore = None
-        self.retriever = None
-        self.indexed_documents = []  # Track which documents are indexed
+        self.vectorstore = Chroma(
+            collection_name="college_rag_collection",
+            embedding_function=self.embeddings,
+            persist_directory=PERSIST_DIRECTORY
+        )
+        self.load_bm25_data()
+
         self.bm25_retrievers = {} #Dictionary to hold a separate retriever for each space
         self.space_docs_map = defaultdict(list) #Map to store documents grouped by space for rebuilding indexes
         print("System Initialized.")
-
-    def load_existing_embeddings(self):
-        """
-        Load previously saved Partitioned embeddings from disk.
-        """
-        faiss_index_path = os.path.join(EMBEDDINGS_DIR, "faiss_index")
-        bm25_map_path = os.path.join(EMBEDDINGS_DIR, "bm25_docs_map.pkl")
-        indexed_docs_path = os.path.join(EMBEDDINGS_DIR, "indexed_documents.pkl")
+    
+    def load_bm25_data(self):
+        """Loads the BM25 data from pickle files."""
+        bm25_map_path = os.path.join(BM25_DATA_DIR, "bm25_docs_map.pkl")
         
-        if not os.path.exists(faiss_index_path):
-            print("No existing embeddings found.")
-            return False
-        
-        try:
-            print("Loading existing embeddings from disk...")
-            
-            # 1. Load FAISS index
-            self.vectorstore = FAISS.load_local(
-                faiss_index_path, 
-                self.embeddings,
-                allow_dangerous_deserialization=True
-            )
-            
-            # 2. Load BM25 Partitions
-            self.bm25_retrievers = {}
-            self.space_docs_map = defaultdict(list)
-
-            if os.path.exists(bm25_map_path):
+        if os.path.exists(bm25_map_path):
+            try:
                 print("Loading BM25 partitions...")
                 with open(bm25_map_path, "rb") as f:
                     self.space_docs_map = pickle.load(f)
                 
-                # Re-instantiate a retriever for each space
+                # Rebuild Retrievers
                 for space_id, docs in self.space_docs_map.items():
                     retriever = BM25Retriever.from_documents(docs)
                     retriever.k = TOP_K_RETRIEVAL
                     self.bm25_retrievers[space_id] = retriever
-            else:
-                print("Warning: BM25 map not found.")
+                print("BM25 Data Loaded.")
+            except Exception as e:
+                print(f"Error loading BM25: {e}")
+                self.space_docs_map = defaultdict(list)
 
-            # 3. Load indexed documents list
-            if os.path.exists(indexed_docs_path):
-                with open(indexed_docs_path, "rb") as f:
-                    self.indexed_documents = pickle.load(f)
+    # def load_existing_embeddings(self):
+    #     """
+    #     Load previously saved Partitioned embeddings from disk.
+    #     """
+    #     faiss_index_path = os.path.join(EMBEDDINGS_DIR, "faiss_index")
+    #     bm25_map_path = os.path.join(EMBEDDINGS_DIR, "bm25_docs_map.pkl")
+    #     indexed_docs_path = os.path.join(EMBEDDINGS_DIR, "indexed_documents.pkl")
+        
+    #     if not os.path.exists(faiss_index_path):
+    #         print("No existing embeddings found.")
+    #         return False
+        
+    #     try:
+    #         print("Loading existing embeddings from disk...")
             
-            print(f"Successfully loaded embeddings for {len(self.indexed_documents)} document(s).")
-            return True
+    #         # 1. Load FAISS index
+    #         self.vectorstore = FAISS.load_local(
+    #             faiss_index_path, 
+    #             self.embeddings,
+    #             allow_dangerous_deserialization=True
+    #         )
             
-        except Exception as e:
-            print(f"Error loading embeddings: {str(e)}")
-            # Reset state on failure
-            self.vectorstore = None
-            self.bm25_retrievers = {}
-            self.space_docs_map = defaultdict(list)
-            self.indexed_documents = []
-            return False
-            
-        except Exception as e:
-            print(f"Error loading embeddings: {str(e)}")
-            print("Will start with empty index.")
-            self.vectorstore = None
-            self.retriever = None
-            self.indexed_documents = []
-            return False
+    #         # 2. Load BM25 Partitions
+    #         self.bm25_retrievers = {}
+    #         self.space_docs_map = defaultdict(list)
 
-    #
+    #         if os.path.exists(bm25_map_path):
+    #             print("Loading BM25 partitions...")
+    #             with open(bm25_map_path, "rb") as f:
+    #                 self.space_docs_map = pickle.load(f)
+                
+    #             # Re-instantiate a retriever for each space
+    #             for space_id, docs in self.space_docs_map.items():
+    #                 retriever = BM25Retriever.from_documents(docs)
+    #                 retriever.k = TOP_K_RETRIEVAL
+    #                 self.bm25_retrievers[space_id] = retriever
+    #         else:
+    #             print("Warning: BM25 map not found.")
+
+    #         # 3. Load indexed documents list
+    #         if os.path.exists(indexed_docs_path):
+    #             with open(indexed_docs_path, "rb") as f:
+    #                 self.indexed_documents = pickle.load(f)
+            
+    #         print(f"Successfully loaded embeddings for {len(self.indexed_documents)} document(s).")
+    #         return True
+            
+    #     except Exception as e:
+    #         print(f"Error loading embeddings: {str(e)}")
+    #         # Reset state on failure
+    #         self.vectorstore = None
+    #         self.bm25_retrievers = {}
+    #         self.space_docs_map = defaultdict(list)
+    #         self.indexed_documents = []
+    #         return False
+            
+    #     except Exception as e:
+    #         print(f"Error loading embeddings: {str(e)}")
+    #         print("Will start with empty index.")
+    #         self.vectorstore = None
+    #         self.retriever = None
+    #         self.indexed_documents = []
+    #         return False
+
     def load_and_process_pdf(self, file_url: str, space_id: int) -> List[Document]:
         """
         Downloads PDF from a URL (Supabase), processes it safely with Rate Limiting, and cleans up.
@@ -290,93 +315,52 @@ class AdvancedRAGSystem:
                 
     def build_index(self, documents: List[Document]):
         with self.index_lock:
-            """
-            Builds Partitioned Indexes: 
-            1. FAISS (Global Vector Store) 
-            2. BM25 (Partitioned by Space ID)
-            """
-            print("--- Building Partitioned Indexes ---")
-        
-            # 1. Build Vector Store (FAISS) - Global Index
-            # FAISS handles everything efficiently in one index using filter tags.
-            print("Indexing into FAISS...")
-            if self.vectorstore is None:
-                self.vectorstore = FAISS.from_documents(documents, self.embeddings)
-            else:
-                new_vectorstore = FAISS.from_documents(documents, self.embeddings)
-                self.vectorstore.merge_from(new_vectorstore)
-        
-            # 2. Build BM25 Retrievers (Partitioned by Space)
-            print("Indexing into BM25 Partitions...")
-        
-            # Define path for the new map structure
-            bm25_map_path = os.path.join(EMBEDDINGS_DIR, "bm25_docs_map.pkl")
-        
-            # Load existing map or create new
-            # Structure: { space_id: [doc1, doc2, ...] }
-            if os.path.exists(bm25_map_path):
-                with open(bm25_map_path, "rb") as f:
-                    self.space_docs_map = pickle.load(f)
-            else:
-                self.space_docs_map = defaultdict(list)
-
-            # Sort new documents into their specific space buckets
+            print("--- Updating Partitioned Indexes ---")
+            
+            # 1. Update ChromaDB (Incremental)
+            # Unlike FAISS, we just add the new documents to the existing DB
+            print("Adding documents to ChromaDB...")
+            self.vectorstore.add_documents(documents)
+            
+            # 2. Update BM25 (Rebuild required for BM25 usually)
+            print("Updating BM25 Partitions...")
+            bm25_map_path = os.path.join(BM25_DATA_DIR, "bm25_docs_map.pkl")
+            
+            # Update the map
             for doc in documents:
-                # Default to 'global' if no space_id is found
                 space_id = doc.metadata.get('space_id', 'global')
                 self.space_docs_map[space_id].append(doc)
 
-            # Rebuild Retrievers for ALL spaces
-            # We maintain a dictionary: { space_id: BM25RetrieverObject }
-            self.bm25_retrievers = {} 
-        
-            print(f"Rebuilding BM25 retrievers for {len(self.space_docs_map)} spaces...")
-            for space_id, docs in self.space_docs_map.items():
+            # Rebuild Retriever for this specific space
+            space_ids_to_update = set(doc.metadata.get('space_id', 'global') for doc in documents)
+            
+            for space_id in space_ids_to_update:
+                docs = self.space_docs_map[space_id]
                 retriever = BM25Retriever.from_documents(docs)
                 retriever.k = TOP_K_RETRIEVAL
                 self.bm25_retrievers[space_id] = retriever
 
-            # 3. Save embeddings to disk
-            print("Saving embeddings to disk...")
-        
-            # Save FAISS
-            faiss_index_path = os.path.join(EMBEDDINGS_DIR, "faiss_index")
-            self.vectorstore.save_local(faiss_index_path)
-        
-            # Save BM25 Map (The dictionary of lists)
+            # Save BM25 Data
+            print("Saving BM25 data to disk...")
             with open(bm25_map_path, "wb") as f:
                 pickle.dump(self.space_docs_map, f)
-        
-            # Track indexed documents (for logging/debugging)
-            for doc in documents:
-                source = doc.metadata.get('source_document', 'Unknown')
-                if source not in self.indexed_documents:
-                    self.indexed_documents.append(source)
-        
-            indexed_docs_path = os.path.join(EMBEDDINGS_DIR, "indexed_documents.pkl")
-            with open(indexed_docs_path, "wb") as f:
-                pickle.dump(self.indexed_documents, f)
-        
-            print("Indexing Complete and Saved.")
+            
+            print("Indexing Complete.")
 
     def query(self, user_query: str, space_id: int = None) -> Dict[str, Any]:
         """
         Query with Partitioned Retrieval.
-        1. FAISS: Filters by space_id using native metadata filtering.
+        1. Chromadb: Chroma handles filtering natively.
         2. BM25: Selects the specific retriever for the given space_id.
         3. Reranks the combined results.
         """
         print(f"\n--- Querying: {user_query} (Space ID: {space_id}) ---")
 
-        # --- STEP 1: FAISS Retrieval (Native Filtering) ---
-        # FAISS allows strict filtering using a dictionary.
-        if not self.vectorstore:
-             return {"answer": "Index not built.", "source_document": None}
-
+        # --- STEP 1: Chromadb Retrieval  ---
         filter_dict = {'space_id': space_id} if space_id else None
         
         # We call similarity_search directly instead of using a retriever wrapper
-        faiss_docs = self.vectorstore.similarity_search(
+        chroma_docs = self.vectorstore.similarity_search(
             user_query, 
             k=TOP_K_RETRIEVAL, 
             filter=filter_dict
@@ -400,7 +384,7 @@ class AdvancedRAGSystem:
 
         # --- STEP 3: Ensemble (Merge & Deduplicate) ---
         # Combine lists and remove duplicates based on page_content
-        combined_docs_map = {doc.page_content: doc for doc in faiss_docs + bm25_docs}
+        combined_docs_map = {doc.page_content: doc for doc in chroma_docs + bm25_docs}
         combined_docs = list(combined_docs_map.values())
 
         if not combined_docs:

@@ -23,15 +23,15 @@ body {
   overflow: hidden;
 }
 
-/*@layer utilities {*/
-/*  !* Chrome, Safari and Opera *!*/
-/*  .custom-scrollbar::-webkit-scrollbar {*/
-/*    display: none;*/
-/*  }*/
+@layer utilities {
+  /* Chrome, Safari and Opera */
+  .custom-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 
-/*  !* IE, Edge and Firefox *!*/
-/*  .custom-scrollbar {*/
-/*    -ms-overflow-style: none;  !* IE and Edge *!*/
-/*    scrollbar-width: none;  !* Firefox *!*/
-/*  }*/
-/*}*/
+  /* IE, Edge and Firefox */
+  .custom-scrollbar {
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;     /* Firefox */
+  }
+}

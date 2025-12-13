@@ -1,5 +1,6 @@
 import logging
 from typing import List, Dict, Optional, Tuple
+from urllib.parse import unquote
 
 # Setup logging
 logger = logging.getLogger("ChatState")
@@ -79,7 +80,8 @@ class OmarHandlers:
         if not source_filename:
             return
 
-        clean_filename = source_filename.replace("temp_", "")
+        # URL-decode the filename (e.g., "RAG%20Test.pdf" -> "RAG Test.pdf")
+        clean_filename = unquote(source_filename.replace("temp_", ""))
         doc_id = self.db.get_document_id_by_filename(space_id, clean_filename)
 
         if doc_id:
