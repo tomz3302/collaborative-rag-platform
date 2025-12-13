@@ -21,10 +21,10 @@ class MessageRequest(BaseModel):
 async def chat(
     request: QueryRequest, 
     space_id: int = Query(1),
-    user: User = Depends(current_active_user) # <--- PROTECTED ROUTE
+    user: User = Depends(current_active_user)
 ):
     try:
-        # We use the ACTUAL user ID from the login now
+        
         result = chat_controller.process_user_query(
             query_text=request.text,
             user_id=user.id, 

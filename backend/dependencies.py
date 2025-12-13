@@ -9,12 +9,6 @@ from handlers import OmarHandlers
 db_manager = DBManager()
 rag_system = AdvancedRAGSystem()
 
-# 2. Load Embeddings safely
-try:
-    rag_system.load_existing_embeddings()
-except Exception as e:
-    print(f"Warning: No embeddings loaded. {e}")
-
 # 3. Initialize Controllers
 handler = OmarHandlers(db_manager=db_manager)
 chat_controller = ChatController(db_manager=db_manager, rag_system=rag_system)

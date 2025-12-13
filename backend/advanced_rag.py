@@ -347,21 +347,27 @@ class AdvancedRAGSystem:
             
             print("Indexing Complete.")
 
-    def query(self, user_query: str, space_id: int = None) -> Dict[str, Any]:
+    def query(self, user_query: str, space_id: int = None, history_messages: List[Dict] = None) -> Dict[str, Any]:
         """
-        Query with Partitioned Retrieval.
+        Query with Partitioned Retrieval & (NEW) History awareness.
         1. Chromadb: Chroma handles filtering natively.
         2. BM25: Selects the specific retriever for the given space_id.
         3. Reranks the combined results.
         """
         print(f"\n--- Querying: {user_query} (Space ID: {space_id}) ---")
 
+        # --- STEP 0: Query Contextualization ---
+        # We use the rewritten query for SEARCH, but the original query for the final CHAT.
+        search_query = user_query
+        if history_messages:
+            search_query = self.contextualize_query(user_query, history_messages)
+    
         # --- STEP 1: Chromadb Retrieval  ---
         filter_dict = {'space_id': space_id} if space_id else None
         
         # We call similarity_search directly instead of using a retriever wrapper
         chroma_docs = self.vectorstore.similarity_search(
-            user_query, 
+            search_query, 
             k=TOP_K_RETRIEVAL, 
             filter=filter_dict
         )
@@ -373,14 +379,14 @@ class AdvancedRAGSystem:
             # Look up the specific retriever in our dictionary
             target_retriever = self.bm25_retrievers.get(space_id)
             if target_retriever:
-                bm25_docs = target_retriever.invoke(user_query)
+                bm25_docs = target_retriever.invoke(search_query)
             else:
                 print(f"Warning: No BM25 index found for space {space_id} (might be empty).")
         else:
             # CASE B: Global Search (Optional fallback)
             # If no space is specified, we check all partitions
             for retriever in self.bm25_retrievers.values():
-                bm25_docs.extend(retriever.invoke(user_query))
+                bm25_docs.extend(retriever.invoke(search_query))
 
         # --- STEP 3: Ensemble (Merge & Deduplicate) ---
         # Combine lists and remove duplicates based on page_content
@@ -394,7 +400,7 @@ class AdvancedRAGSystem:
         # We manually call the compressor on our combined list
         reranked_docs = self.compressor.compress_documents(
             documents=combined_docs, 
-            query=user_query
+            query=search_query
         )
 
         if not reranked_docs:
@@ -427,7 +433,7 @@ class AdvancedRAGSystem:
             "2. **Elaboration & Depth**: Do not just summarize. Expand on the concepts mentioned in the context. "
             "Explain the 'Why' and 'How' behind the theories. If the context is brief, use your internal knowledge "
             "to provide the theoretical background.\n"
-            "3. **Examples**: Provide concrete, real-world engineering examples or analogies to illustrate the points, "
+            "3. **Examples**: Provide concrete, real-world engineering examples or analogies to illustrate the points, whenever you see fits, "
             "even if they are not explicitly in the context.\n"
             "4. **Structure**: Use clear formatting, bullet points, and bold text to make the answer easy to read.\n"
             "5. **Citation**: explicitely mention what part of the answer comes from the context and what part is your own elaboration.\n\n"
@@ -435,11 +441,18 @@ class AdvancedRAGSystem:
             "CONTEXT:\n"
             "{context}"
         )
+        # Build Prompt: System -> History -> Original Question
+        messages_list = [("system", system_prompt)]
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", system_prompt),
-            ("human", "{question}")
-        ])
+        if history_messages:
+            for msg in history_messages:
+                role = "human" if msg.get('role') == 'user' else "ai"
+                content = msg.get('content', '')
+                messages_list.append((role, content))
+
+        messages_list.append(("human", "{question}"))
+
+        prompt = ChatPromptTemplate.from_messages(messages_list)
 
         chain = prompt | self.llm | StrOutputParser()
 
@@ -460,4 +473,40 @@ class AdvancedRAGSystem:
             "source_document": top_source_filename,
             "top_chunk_page_content": top_doc.page_content[:200] + "..." 
         }
+    
+    def contextualize_query(self, user_query: str, history_messages: List[Dict]) -> str:
+        """
+        If history exists, rewrite the query to be standalone.
+        If no history, return the query as is.
+        """
+        if not history_messages:
+            return user_query
+
+        # Simple prompt for the rewriter
+        system_prompt = (
+            "Given a chat history and the latest user question "
+            "which might reference context in the chat history, "
+            "formulate a standalone question which can be understood "
+            "without the chat history. Do NOT answer the question, "
+            "just reformulate it if needed and otherwise return it as is."
+        )
+
+        # Create the chain
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
+            ("human", "History: {history}\n\nQuestion: {question}")
+        ])
+
+        chain = prompt | self.llm | StrOutputParser()
+
+        # Format history as a simple string for the LLM
+        history_str = "\n".join([f"{m['role']}: {m['content']}" for m in history_messages])
+
+        standalone_query = chain.invoke({
+            "history": history_str,
+            "question": user_query
+        })
+
+        print(f"--- Rewritten Query: {standalone_query} ---")
+        return standalone_query
 

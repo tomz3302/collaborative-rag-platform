@@ -9,8 +9,8 @@ from supabase import create_client, Client
 router = APIRouter()
 
 # SUPABASE CONFIGURATION
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+SUPABASE_URL = "https://rrcvxnrtjejetktzkesz.supabase.co" #os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = "sb_secret_eEIcNgGmfrdm4RFM5AS7rw_H5E-hMWk" #os.environ.get("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise RuntimeError("Supabase credentials not found in environment variables.")

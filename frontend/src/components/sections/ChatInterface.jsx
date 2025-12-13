@@ -68,7 +68,7 @@ export const ChatInterface = ({
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 className="w-full border-2 px-10 py-5 text-sm focus:outline-none transition-all font-mono placeholder:opacity-40 bg-gray-50 border-black focus:bg-white focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
-                placeholder="Enter command or query..."
+                placeholder="Ask Clark..."
             />
             <button type="submit" disabled={isChatLoading} className="absolute right-4 top-1/2 -translate-y-1/2 p-2 border border-transparent rounded-none transition-colors hover:bg-black hover:text-white hover:border-black">
                 <ArrowRight size={20} />
