@@ -63,13 +63,18 @@ async def upload_file(
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/documents")
-async def get_documents(space_id: int = Query(1)):
-    # Public or Protected? Let's make it protected
+async def get_documents(
+    space_id: int = Query(1),
+    user = Depends(current_active_user)
+):
     return {"documents": db_manager.get_documents_for_space(space_id)}
 
 @router.get("/documents/{doc_id}/content")
-async def get_document_content(doc_id: int, space_id: int = Query(1)):
-    # Retrieve the link from DB and return it for the Frontend Iframe
+async def get_document_content(
+    doc_id: int,
+    space_id: int = Query(1),
+    user = Depends(current_active_user)
+):
     docs = db_manager.get_documents_for_space(space_id)
     target_doc = next((d for d in docs if d['id'] == doc_id), None)
     
@@ -83,5 +88,8 @@ async def get_document_content(doc_id: int, space_id: int = Query(1)):
     }
 
 @router.get("/documents/{doc_id}/threads")
-async def get_document_threads(doc_id: int):
+async def get_document_threads(
+    doc_id: int,
+    user = Depends(current_active_user)
+):
     return {"threads": db_manager.get_threads_for_document(doc_id)}

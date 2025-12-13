@@ -3,8 +3,19 @@
 Complete API documentation for the Collaborative RAG Platform backend server.
 
 **Base URL:** `http://localhost:8000`
-
+**Last Updated:** January 2025  
 **Default Port:** 8000
+
+---
+
+## Authentication
+
+All protected routes require JWT authentication. Include the token in the Authorization header:
+```
+Authorization: Bearer <your_jwt_token>
+```
+
+Tokens are valid for 2 hours after login.
 
 ---
 
@@ -355,7 +366,7 @@ const user = await response.json();
 ## Upload API
 
 ### POST /api/upload
-Upload a PDF document to the knowledge base and index it for RAG queries.
+Upload a PDF document to Supabase storage, index it for RAG queries, and store metadata in the database.
 
 **Endpoint:** `POST /api/upload`
 
@@ -365,27 +376,29 @@ Upload a PDF document to the knowledge base and index it for RAG queries.
 
 **Request Parameters:**
 - `file` (form-data, required): PDF file to upload
+- `space_id` (query parameter, optional): Target space ID (default: 1)
 
 **Success Response (200):**
 ```json
 {
   "status": "success",
-  "message": "file uploaded correctly",
-  "document_id": 1
+  "document_id": 1,
+  "url": "https://rrcvxnrtjejetktzkesz.supabase.co/storage/v1/object/public/course-materials/space_1/document.pdf"
 }
 ```
 
 **Error Response (500):**
 ```json
 {
-  "status": "error",
   "detail": "<error message>"
 }
 ```
 
 **Example (PowerShell):**
 ```powershell
-curl -X POST http://localhost:8000/api/upload `
+$headers = @{ Authorization = "Bearer $token" }
+curl -X POST "http://localhost:8000/api/upload?space_id=1" `
+  -H "Authorization: Bearer $token" `
   -F "file=@C:\path\to\document.pdf"
 ```
 
@@ -427,14 +440,12 @@ Send a query to the RAG system and get an AI-generated response with sources.
 ```json
 {
   "text": "What is the main topic of the document?",
-  "user_id": 1,
   "thread_id": null
 }
 ```
 
 **Request Schema:**
 - `text` (string, required): The user's question/query
-- `user_id` (int, optional, default: 1): User ID
 - `thread_id` (int, optional): If provided, continues an existing conversation thread
 
 **Success Response (200):**
@@ -450,22 +461,28 @@ Send a query to the RAG system and get an AI-generated response with sources.
 **Error Response (500):**
 ```json
 {
-  "error": "<error message>"
+  "detail": "<error message>"
 }
 ```
 
 **Example (PowerShell):**
 ```powershell
+$headers = @{ Authorization = "Bearer $token" }
 curl -X POST "http://localhost:8000/api/chat?space_id=1" `
   -H "Content-Type: application/json" `
+  -H "Authorization: Bearer $token" `
   -d '{"text":"What is machine learning?","thread_id":null}'
 ```
 
 **Example (JavaScript/Fetch):**
 ```javascript
+const token = localStorage.getItem('token');
 const response = await fetch('/api/chat?space_id=1', {
   method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
+  headers: { 
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`
+  },
   body: JSON.stringify({
     text: 'What is machine learning?',
     thread_id: null
@@ -476,9 +493,10 @@ const data = await response.json();
 
 **Notes:**
 - If `thread_id` is null, a new conversation thread is created
-- If `thread_id` is provided, the message is added to that thread
+- If `thread_id` is provided, the message is added to that thread with full conversation history
 - The response includes the `thread_id` - save it to continue the conversation
-- Always uses `user_id=1` internally (hardcoded)
+- Uses authenticated user's ID automatically (no need to send user_id)
+- History context is automatically included (last 5 messages) when continuing a thread
 
 ---
 
@@ -501,15 +519,13 @@ Create a branch (fork) from a specific message in a conversation thread.
 ```json
 {
   "content": "Can you explain this differently?",
-  "parent_message_id": 42,
-  "user_id": 1
+  "parent_message_id": 42
 }
 ```
 
 **Request Schema:**
 - `content` (string, required): The new message/query for the branch
 - `parent_message_id` (int, required): The message ID to branch from
-- `user_id` (int, optional, default: 1): User ID
 
 **Success Response (200):**
 ```json
@@ -524,14 +540,16 @@ Create a branch (fork) from a specific message in a conversation thread.
 **Error Response (500):**
 ```json
 {
-  "error": "<error message>"
+  "detail": "<error message>"
 }
 ```
 
 **Example (PowerShell):**
 ```powershell
+$headers = @{ Authorization = "Bearer $token" }
 curl -X POST "http://localhost:8000/api/threads/5/branch?space_id=1" `
   -H "Content-Type: application/json" `
+  -H "Authorization: Bearer $token" `
   -d '{"content":"Explain this more simply","parent_message_id":42}'
 ```
 
@@ -539,20 +557,21 @@ curl -X POST "http://localhost:8000/api/threads/5/branch?space_id=1" `
 - Creates a new conversational branch from a specific message
 - Useful for exploring alternative explanations or "what-if" scenarios
 - The branch inherits context from the parent message's conversation path
+- Uses authenticated user's ID automatically
 
 ---
 
 ## Document APIs
 
 ### GET /api/documents
-Retrieve a list of all documents or documents for a specific space.
+Retrieve a list of all documents for a specific space.
 
 **Endpoint:** `GET /api/documents`
 
 **Auth Required:** Yes (Bearer token)
 
 **Query Parameters:**
-- `space_id` (int, optional): Filter documents by space ID
+- `space_id` (int, optional, default: 1): Filter documents by space ID
 
 **Success Response (200):**
 ```json
@@ -562,14 +581,14 @@ Retrieve a list of all documents or documents for a specific space.
       "id": 1,
       "filename": "lecture_notes.pdf",
       "file_type": "pdf",
-      "file_url": "/path/to/storage/lecture_notes.pdf",
+      "file_url": "https://rrcvxnrtjejetktzkesz.supabase.co/storage/v1/object/public/course-materials/space_1/lecture_notes.pdf",
       "uploaded_at": "2025-12-08T10:30:00"
     },
     {
       "id": 2,
       "filename": "textbook.pdf",
       "file_type": "pdf",
-      "file_url": "/path/to/storage/textbook.pdf",
+      "file_url": "https://rrcvxnrtjejetktzkesz.supabase.co/storage/v1/object/public/course-materials/space_1/textbook.pdf",
       "uploaded_at": "2025-12-07T14:20:00"
     }
   ]
@@ -579,7 +598,7 @@ Retrieve a list of all documents or documents for a specific space.
 **Error Response (500):**
 ```json
 {
-  "error": "<error message>"
+  "detail": "<error message>"
 }
 ```
 
@@ -600,15 +619,21 @@ const data = await response.json();
 console.log(data.documents);
 ```
 
+**Example (PowerShell):**
+```powershell
+$headers = @{ Authorization = "Bearer $token" }
+curl "http://localhost:8000/api/documents?space_id=1" -H "Authorization: Bearer $token"
+```
+
 **Notes:**
-- If `space_id` is not provided, returns all documents across all spaces
-- If `space_id` is provided, returns only documents in that space
-- Includes the `file_url` field which contains the storage path
+- Returns all documents in the specified space (default space_id=1)
+- `file_url` contains the Supabase public URL for the PDF
+- Files are stored in Supabase storage bucket "course-materials"
 
 ---
 
 ### GET /api/documents/{doc_id}/content
-Stream/download the PDF file content.
+Get the Supabase URL for viewing/downloading the PDF file.
 
 **Endpoint:** `GET /api/documents/{doc_id}/content`
 
@@ -617,8 +642,17 @@ Stream/download the PDF file content.
 **Path Parameters:**
 - `doc_id` (int, required): The document ID
 
+**Query Parameters:**
+- `space_id` (int, optional, default: 1): The space ID
+
 **Success Response (200):**
-- Returns the PDF file with `Content-Type: application/pdf`
+```json
+{
+  "url": "https://rrcvxnrtjejetktzkesz.supabase.co/storage/v1/object/public/course-materials/space_1/document.pdf",
+  "type": "external",
+  "filename": "document.pdf"
+}
+```
 
 **Error Response (404):**
 ```json
@@ -626,29 +660,24 @@ Stream/download the PDF file content.
   "detail": "Document not found"
 }
 ```
-or
-```json
-{
-  "detail": "File missing from server storage"
-}
-```
 
 **Example (PowerShell):**
 ```powershell
-# Download PDF
-curl http://localhost:8000/api/documents/1/content -o document.pdf
+$headers = @{ Authorization = "Bearer $token" }
+$response = curl "http://localhost:8000/api/documents/1/content?space_id=1" -H "Authorization: Bearer $token" | ConvertFrom-Json
+# Use $response.url in an iframe or browser
 ```
 
 **Example (HTML):**
 ```html
 <!-- Embed in iframe -->
-<iframe src="/api/documents/1/content" width="100%" height="600px"></iframe>
+<iframe src="<Supabase URL from response>" width="100%" height="600px"></iframe>
 ```
 
 **Notes:**
-- Returns the actual PDF file for viewing/downloading
-- File is served from `backend/storage/` directory
-- Checks database for file metadata before serving
+- Returns metadata with Supabase public URL, not the PDF file directly
+- The URL can be used in iframes, browsers, or downloaded directly
+- While the Supabase files are publicly accessible, this endpoint requires authentication to access
 
 ---
 
@@ -670,13 +699,15 @@ Get all conversation threads associated with a specific document.
       "id": 1,
       "title": "Discussion about Chapter 1",
       "creator_user_id": 1,
+      "user": "John Doe",
       "created_at": "2025-12-08T09:00:00",
       "page_number": 1
     },
     {
       "id": 2,
       "title": "Questions on Section 2.3",
-      "creator_user_id": 1,
+      "creator_user_id": 2,
+      "user": "Jane Smith",
       "created_at": "2025-12-08T11:30:00",
       "page_number": 15
     }
@@ -761,13 +792,14 @@ Retrieve a conversation thread with all its messages.
 **Error Response (500):**
 ```json
 {
-  "error": "<error message>"
+  "detail": "<error message>"
 }
 ```
 
 **Example (PowerShell):**
 ```powershell
-curl http://localhost:8000/api/threads/1
+$headers = @{ Authorization = "Bearer $token" }
+curl "http://localhost:8000/api/threads/1" -H "Authorization: Bearer $token"
 ```
 
 **Notes:**
@@ -819,14 +851,16 @@ Add a new message to an existing thread.
 
 **Example (PowerShell):**
 ```powershell
-curl -X POST http://localhost:8000/api/threads/1/messages `
+$headers = @{ Authorization = "Bearer $token" }
+curl -X POST "http://localhost:8000/api/threads/1/messages" `
   -H "Content-Type: application/json" `
+  -H "Authorization: Bearer $token" `
   -d '{"content":"Thanks for the explanation!"}'
 ```
 
 **Notes:**
 - Adds a message to the thread as a continuation of the last message
-- Uses `user_id=1` internally for database operations
+- Uses authenticated user's ID automatically
 - Returns the created message ID
 
 ---
@@ -865,8 +899,17 @@ Create a new workspace/space for organizing documents and threads.
 **Error Response (500):**
 ```json
 {
-  "error": "<error message>"
+  "detail": "<error message>"
 }
+```
+
+**Example (PowerShell):**
+```powershell
+$headers = @{ Authorization = "Bearer $token" }
+curl -X POST "http://localhost:8000/api/spaces" `
+  -H "Content-Type: application/json" `
+  -H "Authorization: Bearer $token" `
+  -d '{"name":"CS101","description":"Algorithms course"}'
 ```
 
 **Example (PowerShell):**
