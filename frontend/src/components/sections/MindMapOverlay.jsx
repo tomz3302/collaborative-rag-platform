@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Minimize2, ArrowRight, Split } from 'lucide-react';
+import { Minimize2, ArrowRight, MessageSquarePlus } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { MindMapCard } from '../ui/MindMapCard';
 import { PixelLoader } from '../ui/PixelLoader';
@@ -29,10 +29,10 @@ export const MindMapOverlay = ({
                 <div className="h-20 flex items-center justify-between px-8 border-b-2 bg-white border-black">
                     <div className="flex items-center gap-4">
                         <div className="px-3 py-1 text-sm font-bold uppercase tracking-wider shadow-[2px_2px_0px_0px_rgba(0,0,0,0.2)] bg-black text-white">
-                            DETAILS
+                            THREAD
                         </div>
                         <div className="h-px w-12 bg-black"></div>
-                        <span className="font-mono text-sm opacity-60">Exploring Logic Branch</span>
+                        <span className="font-mono text-sm opacity-60">Following the Thread</span>
                     </div>
                     <button onClick={() => setIsMapOpen(false)} className="w-10 h-10 flex items-center justify-center border-2 transition-all active:translate-x-[2px] active:translate-y-[2px] active:shadow-none border-black hover:bg-black hover:text-white shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]">
                         <Minimize2 size={20} />
@@ -66,7 +66,7 @@ export const MindMapOverlay = ({
                                 {col.isTempBranch && !col.messages?.length && (
                                     <div className="h-full flex flex-col justify-end pb-4">
                                         <div className="text-sm opacity-60 font-mono mb-2">
-                                            // Start a new branch from context...
+                                            // Ask a follow-up question...
                                         </div>
                                     </div>
                                 )}
@@ -101,7 +101,7 @@ export const MindMapOverlay = ({
                                                     onClick={() => handleDigDeeper(colIndex, msg.id, col.id)}
                                                     className="text-xs font-bold flex items-center gap-2 px-3 py-1 border border-transparent transition-colors bg-gray-100 hover:bg-black hover:text-white hover:border-black"
                                                 >
-                                                    <Split size={14} /> DIG_DEEPER
+                                                    <MessageSquarePlus size={14} />
                                                 </button>
                                             </div>
                                         )}

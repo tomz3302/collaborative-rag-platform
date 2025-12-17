@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Plus, ArrowRight, Folder, Terminal, Loader2 } from 'lucide-react';
+import { BookOpenCheck, Plus, ArrowRight, Folder, Terminal, Loader2 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { apiFetch } from '../utils/api';
 
@@ -64,11 +64,11 @@ export default function SpaceSelector({ onSelectSpace }) {
 
       {/* HEADER */}
       <div className="mb-12 text-center space-y-4">
-        <div className="inline-flex items-center justify-center w-16 h-16 bg-black text-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
-            <Box size={32} />
+        <div className="relative inline-flex items-center justify-center w-16 h-16 bg-black text-white border-2 border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
+            <BookOpenCheck size={32} />
         </div>
         <h1 className="text-4xl font-black tracking-tighter">Clark</h1>
-        <p className="opacity-60 text-sm">SELECT_SPACE_TO_VIEW</p>
+        <p className="opacity-60 text-sm">SELECT SPACE TO VIEW</p>
       </div>
 
       {/* MAIN GRID */}
