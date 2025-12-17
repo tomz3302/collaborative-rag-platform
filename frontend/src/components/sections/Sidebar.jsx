@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Terminal, FileText, Upload, Loader2, LogOut } from 'lucide-react';
+import { BookOpenCheck, Terminal, FileText, Upload, Loader2, LogOut, Sparkles } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const Sidebar = ({
@@ -15,8 +15,11 @@ export const Sidebar = ({
   return (
     <nav className="w-20 lg:w-64 border-r-2 flex flex-col border-black bg-gray-50">
       <div className="h-16 flex items-center gap-3 px-6 border-b-2 border-black bg-white">
-        <div className="w-8 h-8 flex items-center justify-center border shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] bg-black text-white border-black">
-          <Box size={18} />
+        <div className="relative group">
+          <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded blur opacity-30 group-hover:opacity-60 transition duration-500"></div>
+          <div className="relative w-8 h-8 flex items-center justify-center border shadow-[2px_2px_0px_0px_rgba(0,0,0,0.5)] bg-black text-white border-black">
+            <BookOpenCheck size={18} />
+          </div>
         </div>
         <span className="font-bold text-lg hidden lg:block tracking-tight">Clark</span>
       </div>

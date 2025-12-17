@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Terminal, ArrowRight } from 'lucide-react';
+import { BookOpenCheck, Terminal, ArrowRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { PixelLoader } from '../ui/PixelLoader';
 import { BranchIndicator } from '../ui/BranchIndicator';
@@ -18,9 +18,12 @@ export const ChatInterface = ({
         <div className="flex-1 overflow-y-auto space-y-8 pb-4 custom-scrollbar">
             {messages.length === 0 && (
                  <div className="h-full flex flex-col items-center justify-center opacity-40 text-center space-y-4">
-                    <Box size={64} />
-                    <h2 className="text-2xl font-bold">READY TO PARSE</h2>
-                    <p className="font-sans max-w-md opacity-70">Initialize a request to start extracting data from your uploaded documents.</p>
+                    <div className="relative">
+                      <div className="absolute -inset-2 bg-blue-500 rounded-full blur-md opacity-25"></div>
+                      <BookOpenCheck size={64} className="relative" />
+                    </div>
+                    <h2 className="text-2xl font-bold">KNOWLEDGE BASE IS READY</h2>
+                    <p className="font-sans max-w-md opacity-70">Ask a question to search across all course materials. See what your classmates are asking.</p>
                 </div>
             )}
 

@@ -12,6 +12,22 @@ export const DocumentInterface = ({
   const [pdfUrl, setPdfUrl] = useState(null);
   const [loading, setLoading] = useState(false);
 
+  // Format date: show time if today, otherwise show date
+  const formatThreadDate = (dateString) => {
+    if (!dateString) return '';
+    const date = new Date(dateString);
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    
+    if (isToday) {
+      // Show time only (HH:MM)
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } else {
+      // Show date only (MMM DD, YYYY)
+      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+  };
+
   // 2. Effect: Whenever the user clicks a document, fetch its real Link
   useEffect(() => {
     if (currentDoc) {
@@ -73,7 +89,7 @@ export const DocumentInterface = ({
                     className="group relative p-6 border-b cursor-pointer transition-colors border-black hover:bg-black hover:text-white">
                     <div className="flex justify-between items-start mb-2">
                         <span className="text-xs font-bold border px-2 py-0.5 border-black group-hover:border-white">PAGE_{thread.page_number}</span>
-                        <span className="text-xs font-mono opacity-60">ID: {thread.id}</span>
+                        <span className="text-xs font-mono opacity-60">{formatThreadDate(thread.created_at)}</span>
                     </div>
                     <h4 className="font-bold text-lg mb-1">{thread.title}</h4>
                     {thread.user && (
