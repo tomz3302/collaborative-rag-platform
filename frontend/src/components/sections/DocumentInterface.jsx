@@ -5,7 +5,8 @@ import { apiFetch } from '../../utils/api';
 export const DocumentInterface = ({
   currentDoc,
   docThreads,
-  openThreadInMap
+  openThreadInMap,
+  spaceId
 }) => {
   // 1. State to hold the "Real" Supabase Link
   const [pdfUrl, setPdfUrl] = useState(null);
@@ -15,7 +16,7 @@ export const DocumentInterface = ({
   useEffect(() => {
     if (currentDoc) {
       setLoading(true);
-      apiFetch(`/api/documents/${currentDoc.id}/content`)
+      apiFetch(`/api/documents/${currentDoc.id}/content?space_id=${spaceId}`)
         .then(res => res.json())
         .then(data => {
             // "data.url" is the Supabase link we want

@@ -285,6 +285,7 @@ export default function ClarkRAG() {
                     currentDoc={currentDoc}
                     docThreads={docThreads}
                     openThreadInMap={openThreadInMap}
+                    spaceId={spaceId}
                 />
             )}
           </main>
