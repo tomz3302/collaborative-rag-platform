@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, ArrowRight, Loader } from 'lucide-react';
+import { apiFetch } from '../../utils/api';
 
 export const DocumentInterface = ({
   currentDoc,
@@ -14,7 +15,7 @@ export const DocumentInterface = ({
   useEffect(() => {
     if (currentDoc) {
       setLoading(true);
-      fetch(`/api/documents/${currentDoc.id}/content`)
+      apiFetch(`/api/documents/${currentDoc.id}/content`)
         .then(res => res.json())
         .then(data => {
             // "data.url" is the Supabase link we want

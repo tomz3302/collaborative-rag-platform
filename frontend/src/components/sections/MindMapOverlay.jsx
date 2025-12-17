@@ -1,9 +1,10 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Minimize2, ArrowRight, GitBranch } from 'lucide-react';
+import { Minimize2, ArrowRight, Split } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { MindMapCard } from '../ui/MindMapCard';
 import { PixelLoader } from '../ui/PixelLoader';
+import { BranchIndicator } from '../ui/BranchIndicator';
 import ReactMarkdown from 'react-markdown';
 
 export const MindMapOverlay = ({
@@ -12,7 +13,8 @@ export const MindMapOverlay = ({
   mapColumns,
   setMapColumns,
   handleDigDeeper,
-  sendMessageInColumn
+  sendMessageInColumn,
+  onBranchClick
 }) => {
   return (
     <AnimatePresence>
@@ -87,12 +89,19 @@ export const MindMapOverlay = ({
 
                                         {/* DIG DEEPER ACTION */}
                                         {msg.role === 'assistant' && !col.isTempBranch && (
-                                            <div className="flex justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <div className="flex justify-end items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {/* Branch Indicator */}
+                                                {msg.forks && msg.forks.length > 0 && (
+                                                    <BranchIndicator 
+                                                        forks={msg.forks} 
+                                                        onBranchClick={onBranchClick}
+                                                    />
+                                                )}
                                                 <button
                                                     onClick={() => handleDigDeeper(colIndex, msg.id, col.id)}
                                                     className="text-xs font-bold flex items-center gap-2 px-3 py-1 border border-transparent transition-colors bg-gray-100 hover:bg-black hover:text-white hover:border-black"
                                                 >
-                                                    <GitBranch size={14} /> DIG_DEEPER
+                                                    <Split size={14} /> DIG_DEEPER
                                                 </button>
                                             </div>
                                         )}
@@ -118,7 +127,7 @@ export const MindMapOverlay = ({
                                     >
                                         <input
                                             name="input"
-                                            placeholder={col.isTempBranch ? "Enter new branch query..." : "Append query..."}
+                                            placeholder={col.isTempBranch ? "Ask away!" : "ask daddy clark..."}
                                             autoFocus={col.isTempBranch}
                                             className="w-full border px-3 py-2 text-sm focus:outline-none transition-all font-mono bg-gray-50 border-black focus:bg-white focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
                                         />

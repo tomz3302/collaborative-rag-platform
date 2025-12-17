@@ -16,7 +16,8 @@ class ChatController:
         self.rag = rag_system
 
     def process_user_query(self, user_id: int, query_text: str, space_id: int, thread_id: int = None,
-                           parent_message_id: int = None, use_history: bool = True):
+                           parent_message_id: int = None, use_history: bool = True, is_fork: bool = False,
+                           branch_id: int = None) -> dict:
         """
         Main Business Logic Flow:
         1. Prepare DB State (Thread/Parent/Fork detection)
@@ -25,11 +26,14 @@ class ChatController:
         4. Call AI (RAG)
         5. Log AI Response
         6. Update Document Anchors
+        
+        Args:
+            branch_id: If continuing a branch, pass the branch_id to get correct parent context
         """
 
         # 1. State Preparation
         current_thread_id = self.state_handler.ensure_thread(user_id, query_text,space_id, thread_id)
-        actual_parent_id, is_fork = self.state_handler.resolve_parent_message(current_thread_id, parent_message_id)
+        actual_parent_id = self.state_handler.resolve_parent_message(current_thread_id, parent_message_id, branch_id)
 
         # 2. Log User Message
         user_msg_id = self.state_handler.log_user_message(
@@ -66,9 +70,12 @@ class ChatController:
             self.state_handler.anchor_thread_to_document(current_thread_id, source_doc, space_id)
 
         # 7. Return API Response
+        # For forks, the branch_id is the user message ID (fork start point)
+        response_branch_id = user_msg_id if is_fork else None
         return {
             "thread_id": current_thread_id,
             "response": ai_text,
             "source": source_doc,
-            "is_fork": is_fork
+            "is_fork": is_fork,
+            "branch_id": response_branch_id
         }

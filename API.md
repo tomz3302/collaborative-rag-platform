@@ -435,6 +435,7 @@ Send a query to the RAG system and get an AI-generated response with sources.
 
 **Query Parameters:**
 - `space_id` (optional, default: 1): The workspace/space ID
+- `branch_id` (optional): If continuing within a branch, pass the branch_id for correct context isolation
 
 **Request Body:**
 ```json
@@ -451,11 +452,20 @@ Send a query to the RAG system and get an AI-generated response with sources.
 **Success Response (200):**
 ```json
 {
-  "answer": "The main topic is...",
-  "sources": [...],
   "thread_id": 1,
-  "message_id": 42
+  "response": "The main topic is...",
+  "source": "document.pdf",
+  "is_fork": false,
+  "branch_id": null
 }
+```
+
+**Response Fields:**
+- `thread_id` (int): The conversation thread ID
+- `response` (string): The AI-generated answer
+- `source` (string|null): Source document filename if RAG was used
+- `is_fork` (boolean): Whether this was a branch creation
+- `branch_id` (int|null): The branch ID (set when `is_fork=true`, null for main thread)
 ```
 
 **Error Response (500):**
@@ -497,6 +507,7 @@ const data = await response.json();
 - The response includes the `thread_id` - save it to continue the conversation
 - Uses authenticated user's ID automatically (no need to send user_id)
 - History context is automatically included (last 5 messages) when continuing a thread
+- **Branch Continuation:** When continuing a branch, pass `branch_id` query parameter to ensure correct message context isolation
 
 ---
 
@@ -530,11 +541,20 @@ Create a branch (fork) from a specific message in a conversation thread.
 **Success Response (200):**
 ```json
 {
-  "answer": "...",
-  "sources": [...],
   "thread_id": 1,
-  "message_id": 43
+  "response": "Here's a simpler explanation...",
+  "source": "document.pdf",
+  "is_fork": true,
+  "branch_id": 43
 }
+```
+
+**Response Fields:**
+- `thread_id` (int): The original thread ID
+- `response` (string): The AI-generated answer
+- `source` (string|null): Source document filename if RAG was used
+- `is_fork` (boolean): Always `true` for branch creation
+- `branch_id` (int): The new branch ID - **save this to continue the branch**
 ```
 
 **Error Response (500):**
@@ -807,6 +827,88 @@ curl "http://localhost:8000/api/threads/1" -H "Authorization: Bearer $token"
 - Messages include path information for branching/forking
 - `path` field shows the message ancestry (e.g., "1/5/20/" means message 20 is a reply to 5, which is a reply to 1)
 - `branch_id` indicates which branch the message belongs to (for forked conversations)
+- Each message now includes a `forks` array containing previews of any branches created from that message
+- `forks` array structure: `[{branch_id, preview, created_at}, ...]`
+
+---
+
+### GET /api/branches/{branch_id}
+Retrieve a complete branched conversation including its history and all branch messages.
+
+**Endpoint:** `GET /api/branches/{branch_id}`
+
+**Auth Required:** Yes (Bearer token)
+
+**Path Parameters:**
+- `branch_id` (int, required): The branch ID to retrieve
+
+**Success Response (200):**
+```json
+{
+  "branch_id": 5,
+  "messages": [
+    {
+      "id": 1,
+      "user_id": 1,
+      "role": "user",
+      "content": "What is machine learning?",
+      "path": "1/",
+      "parent_message_id": null,
+      "branch_id": null,
+      "created_at": "2025-12-08T09:00:00"
+    },
+    {
+      "id": 2,
+      "user_id": 1,
+      "role": "assistant",
+      "content": "Machine learning is...",
+      "path": "1/2/",
+      "parent_message_id": 1,
+      "branch_id": null,
+      "created_at": "2025-12-08T09:00:05"
+    },
+    {
+      "id": 10,
+      "user_id": 1,
+      "role": "user",
+      "content": "Can you explain that differently?",
+      "path": "1/2/10/",
+      "parent_message_id": 2,
+      "branch_id": 5,
+      "created_at": "2025-12-08T09:05:00"
+    },
+    {
+      "id": 11,
+      "user_id": 1,
+      "role": "assistant",
+      "content": "Alternative explanation...",
+      "path": "1/2/10/11/",
+      "parent_message_id": 10,
+      "branch_id": 5,
+      "created_at": "2025-12-08T09:05:05"
+    }
+  ]
+}
+```
+
+**Error Response (500):**
+```json
+{
+  "detail": "<error message>"
+}
+```
+
+**Example (PowerShell):**
+```powershell
+$headers = @{ Authorization = "Bearer $token" }
+curl "http://localhost:8000/api/branches/5" -H "Authorization: Bearer $token"
+```
+
+**Notes:**
+- Returns the full conversation context including history leading up to the branch
+- All messages before the branch point are included for context
+- Messages with matching `branch_id` are part of the branch conversation
+- Useful for viewing alternative conversation paths in the Mind Map feature
 
 ---
 

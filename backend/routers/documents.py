@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Depends
 from fastapi.responses import FileResponse
 from dependencies import rag_system, db_manager, STORAGE_DIR
@@ -9,11 +10,15 @@ from supabase import create_client, Client
 router = APIRouter()
 
 # SUPABASE CONFIGURATION
-SUPABASE_URL = "https://rrcvxnrtjejetktzkesz.supabase.co" #os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = "sb_secret_eEIcNgGmfrdm4RFM5AS7rw_H5E-hMWk" #os.environ.get("SUPABASE_KEY")
+SUPABASE_URL = os.environ.get("SUPABASE_URL")
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
 
-if not SUPABASE_URL or not SUPABASE_KEY:
-    raise RuntimeError("Supabase credentials not found in environment variables.")
+if "SUPABASE_URL" not in os.environ:
+    print("Error: SUPABASE_URL environment variable not found.")
+    sys.exit(1)
+if "SUPABASE_KEY" not in os.environ:
+    print("Error: SUPABASE_KEY environment variable not found.")
+    sys.exit(1)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 BUCKET_NAME = "course-materials" # Ensure this bucket exists and is set to PUBLIC in Supabase
 

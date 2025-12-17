@@ -1,4 +1,5 @@
 import mysql.connector
+from mysql.connector import pooling
 import logging
 from typing import List, Dict, Optional
 
@@ -8,7 +9,9 @@ DB_CONFIG = {
     'password': '',  # Update this
     'host': 'localhost',
     'port': 3306,
-    'database': 'rag'
+    'database': 'rag',
+    'pool_name': "rag_pool",
+    'pool_size': 20
 }
 
 logger = logging.getLogger("DB_Manager")
@@ -16,10 +19,10 @@ logger = logging.getLogger("DB_Manager")
 
 class DBManager:
     def __init__(self):
-        self.config = DB_CONFIG
+        self.pool = mysql.connector.pooling.MySQLConnectionPool(**DB_CONFIG)
 
     def get_connection(self):
-        return mysql.connector.connect(**self.config)
+        return self.pool.get_connection()
 
     # --- THREADS ---
     def create_thread(self, space_id: int, title: str, creator_id: int) -> int:
@@ -55,14 +58,23 @@ class DBManager:
             cursor.close()
             conn.close()
 
-    def get_last_message_id(self, thread_id: int) -> Optional[int]:
-        """Gets the very last message added to a thread (for simple continuation)."""
+    def get_last_message_id(self, thread_id: int, branch_id: int = None) -> Optional[int]:
+        """
+        Gets the last message in a thread, respecting branch context.
+        - branch_id=None: returns last MAIN THREAD message (branch_id IS NULL)
+        - branch_id=X: returns last message in that specific branch
+        """
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
-            # We order by ID desc to get the chronological last message
-            query = "SELECT id FROM messages WHERE thread_id = %s ORDER BY id DESC LIMIT 1"
-            cursor.execute(query, (thread_id,))
+            if branch_id is not None:
+                # Get last message in specific branch
+                query = "SELECT id FROM messages WHERE thread_id = %s AND branch_id = %s ORDER BY id DESC LIMIT 1"
+                cursor.execute(query, (thread_id, branch_id))
+            else:
+                # Get last message in main thread only
+                query = "SELECT id FROM messages WHERE thread_id = %s AND branch_id IS NULL ORDER BY id DESC LIMIT 1"
+                cursor.execute(query, (thread_id,))
             result = cursor.fetchone()
             return result[0] if result else None
         finally:
@@ -234,7 +246,8 @@ class DBManager:
 
     def get_thread_with_messages(self, thread_id: int) -> Optional[Dict]:
         """
-        Retrieves a thread and all its messages.
+        Retrieves a thread and only its MAIN thread messages (branch_id IS NULL).
+        Branch messages are excluded to keep the main conversation clean.
         Returns a dictionary with thread info and list of messages.
         """
         conn = self.get_connection()
@@ -255,12 +268,13 @@ class DBManager:
             if not thread:
                 return None
 
-            # Get all messages for this thread
+            # Get only MAIN THREAD messages (branch_id IS NULL)
+            # This excludes all forked/branched messages
             messages_query = """
                 SELECT id, user_id, role, content, path, parent_message_id, 
                        branch_id, created_at
                 FROM messages
-                WHERE thread_id = %s
+                WHERE thread_id = %s AND branch_id IS NULL
                 ORDER BY id ASC
             """
             cursor.execute(messages_query, (thread_id,))
@@ -321,5 +335,84 @@ class DBManager:
             cursor.close()
             conn.close()
 
+
+    def get_message_by_id(self, message_id: int) -> Optional[Dict]:
+        """Helper to fetch a single message."""
+        conn = self.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            cursor.execute("SELECT * FROM messages WHERE id = %s", (message_id,))
+            return cursor.fetchone()
+        finally:
+            cursor.close()
+            conn.close()
+
+    # --- FORKING LOGIC (Fixed & Pooled) ---
+    def get_thread_forks(self, thread_id: int) -> Dict[int, List[Dict]]:
+        """
+        Retrieves all fork start messages for a thread, grouped by their parent message.
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            query = """
+                SELECT id, parent_message_id, content, created_at
+                FROM messages
+                WHERE thread_id = %s 
+                AND branch_id = id  -- Identifies start of a new branch
+            """
+            cursor.execute(query, (thread_id,))
+            rows = cursor.fetchall()
+        
+            forks_map = {}
+            for row in rows:
+                parent_id = row['parent_message_id']
+                if parent_id not in forks_map:
+                    forks_map[parent_id] = []
+                
+                forks_map[parent_id].append({
+                    "branch_id": row['id'], 
+                    "preview": row['content'][:150], 
+                    "created_at": row['created_at']
+                })
+            return forks_map
+        finally:
+            cursor.close()
+            conn.close() # Returns connection to pool
+
+    def get_branch_full_view(self, branch_start_message_id: int) -> List[Dict]:
+        """
+        Fetches the linear conversation path for a specific branch.
+        """
+        conn = self.get_connection()
+        # We need two cursors or separate executions. 
+        # Since we call other methods (get_message_by_id, get_context_messages) 
+        # which get their OWN connections from the pool, we only use this connection
+        # for the final specific query.
+        
+        try:
+            # 1. Fetch start message (This gets its own conn from pool temporarily)
+            start_msg = self.get_message_by_id(branch_start_message_id) 
+            if not start_msg:
+                return []
+
+            # 2. Get Ancestors (This gets its own conn from pool temporarily)
+            ancestors = self.get_context_messages(start_msg['parent_message_id'])
+
+            # 3. Get branch descendants using the current connection
+            cursor = conn.cursor(dictionary=True)
+            branch_query = """
+                SELECT * FROM messages 
+                WHERE thread_id = %s AND branch_id = %s
+                ORDER BY created_at ASC
+            """
+            cursor.execute(branch_query, (start_msg['thread_id'], start_msg['branch_id']))
+            branch_descendants = cursor.fetchall()
+            cursor.close()
+
+            # Combine: Ancestors -> Fork Start -> Children of Fork
+            return ancestors + [start_msg] + branch_descendants
+        finally:
+            conn.close() # Returns connection to pool
 
 

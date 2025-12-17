@@ -129,6 +129,30 @@ export default function ClarkRAG() {
     } catch (err) { console.error(err); }
   };
 
+  // Open a specific branch in the Mind Map
+  const openBranchInMap = async (branchId) => {
+    setIsMapOpen(true);
+
+    try {
+        const res = await apiFetch(`/api/branches/${branchId}`);
+        const data = await res.json();
+        
+        // Create a column for the branch view
+        const branchColumn = {
+            id: branchId,
+            title: `Branch #${branchId}`,
+            messages: data.messages || [],
+            isTempBranch: false,
+            isLoading: false,
+            branchId: branchId // Track for branch continuation
+        };
+        
+        setMapColumns([branchColumn]);
+    } catch (err) { 
+        console.error("Error loading branch:", err); 
+    }
+  };
+
   const handleDigDeeper = (parentThreadIndex, messageId, threadId) => {
     const tempBranchColumn = {
         id: `temp-${Date.now()}`,
@@ -175,12 +199,13 @@ export default function ClarkRAG() {
             responseData = await res.json();
             newThreadId = responseData.thread_id;
         } else {
-            // Existing Thread
+            // Existing Thread or Branch Continuation
             const res = await apiFetch(`/api/chat?space_id=${spaceId}`, {
                  method: 'POST',
                  body: JSON.stringify({
                      text: text,
-                     thread_id: currentColumn.id
+                     thread_id: currentColumn.id,
+                     branch_id: currentColumn.branchId || null
                  })
             });
             responseData = await res.json();
@@ -196,6 +221,7 @@ export default function ClarkRAG() {
                 col.id = newThreadId;
                 col.isTempBranch = false;
                 col.title = "Branched Thread";
+                col.branchId = responseData.branch_id; // Store for branch continuation
             }
 
             col.isLoading = false;
@@ -251,6 +277,7 @@ export default function ClarkRAG() {
                     chatInput={chatInput}
                     setChatInput={setChatInput}
                     sendChatMessage={sendChatMessage}
+                    onBranchClick={openBranchInMap}
                 />
             ) : (
                 // DOCUMENT MODULE
@@ -271,6 +298,7 @@ export default function ClarkRAG() {
         setMapColumns={setMapColumns}
         handleDigDeeper={handleDigDeeper}
         sendMessageInColumn={sendMessageInColumn}
+        onBranchClick={openBranchInMap}
       />
 
     </div>

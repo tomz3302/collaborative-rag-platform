@@ -26,25 +26,29 @@ class OmarHandlers:
             return thread_id
         return thread_id
 
-    def resolve_parent_message(self, thread_id: int, requested_parent_id: int = None) -> Tuple[int, bool]:
+    def resolve_parent_message(self, thread_id: int, requested_parent_id: int = None, branch_id: int = None) -> Optional[int]:
         """
-        Determines the actual parent message ID and whether this is a fork.
-        Returns: (actual_parent_id, is_new_fork)
+        Simplified: Just returns the parent ID. 
+        Fork detection is now handled by which endpoint is called.
+        this function had an older version that detects forks because i made one function
+        that texts normally and forks too, but then i made a separate endpoint for forks,
+        and the fork detection logic is not needed here anymore.
+
+
+        Returns the parent message ID for a new message.
+        - If requested_parent_id is provided, use it directly
+        - Otherwise, find the last message in the appropriate context (main thread or branch)
+        - Returns None if no parent exists (first message in thread/branch)
+
         """
         if requested_parent_id:
-            # User explicitly chose a message to reply to
-            last_msg_id = self.db.get_last_message_id(thread_id)
-            # If they chose a message that ISN'T the last one, it's a fork
-            is_fork = (last_msg_id and requested_parent_id != last_msg_id)
-            if is_fork:
-                logger.info(f"Fork detected from Message {requested_parent_id}")
-            return requested_parent_id, is_fork
+            return requested_parent_id
+        
+        # No parent specified - find the last message in the appropriate context
+        last_msg_id = self.db.get_last_message_id(thread_id, branch_id)
+        return last_msg_id
 
-        # Default: Reply to the latest message
-        last_id = self.db.get_last_message_id(thread_id)
-        return last_id, False
-
-    def log_user_message(self, thread_id: int, user_id: int, content: str, parent_id: int, is_fork: bool) -> int:
+    def log_user_message(self, thread_id: int, user_id: int, content: str, parent_id: Optional[int], is_fork: bool) -> int:
         """Saves the user's input to DB."""
         return self.db.add_message(
             thread_id=thread_id,

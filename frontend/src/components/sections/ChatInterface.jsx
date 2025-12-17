@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Terminal, ArrowRight } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { PixelLoader } from '../ui/PixelLoader';
+import { BranchIndicator } from '../ui/BranchIndicator';
 import ReactMarkdown from 'react-markdown';
 
 export const ChatInterface = ({
@@ -9,7 +10,8 @@ export const ChatInterface = ({
   isChatLoading,
   chatInput,
   setChatInput,
-  sendChatMessage
+  sendChatMessage,
+  onBranchClick
 }) => {
   return (
     <div className="w-full max-w-4xl mx-auto flex flex-col p-6 lg:p-12">
@@ -23,7 +25,7 @@ export const ChatInterface = ({
             )}
 
             {messages.map((msg, i) => (
-                <div key={i} className={cn("flex gap-4", msg.role === 'user' ? "flex-row-reverse" : "")}>
+                <div key={msg.id || i} className={cn("flex gap-4", msg.role === 'user' ? "flex-row-reverse" : "")}>
                     <div className={cn(
                         "p-6 max-w-[80%] border-2 transition-all shadow-[4px_4px_0px_0px_currentColor]",
                         msg.role === 'user'
@@ -41,6 +43,16 @@ export const ChatInterface = ({
                         {msg.source && (
                             <div className="mt-4 pt-4 border-t border-dashed border-gray-400">
                                 <div className="text-xs font-mono opacity-60">SOURCE: {msg.source}</div>
+                            </div>
+                        )}
+                        
+                        {/* Branch Indicator - Show if message has forks */}
+                        {msg.forks && msg.forks.length > 0 && (
+                            <div className="mt-4 pt-4 border-t border-dashed border-gray-400">
+                                <BranchIndicator 
+                                    forks={msg.forks} 
+                                    onBranchClick={onBranchClick}
+                                />
                             </div>
                         )}
                     </div>
