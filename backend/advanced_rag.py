@@ -34,6 +34,15 @@ from langchain_classic.retrievers.document_compressors import CrossEncoderRerank
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from collections import defaultdict
 
+#Supabase Imports
+from supabase import create_client, Client
+from langchain_community.vectorstores import SupabaseVectorStore
+
+
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
 # --- Configuration ---
 # Load API keys from .env or environment variables
 # Priority: .env file > Windows environment variables
@@ -66,8 +75,9 @@ class AdvancedRAGSystem:
         print("Initializing Advanced RAG System...")
         self.index_lock = threading.Lock() # Create a lock for indexing operations
         
-        # Create embeddings directory if it doesn't exist
-        os.makedirs(BM25_DATA_DIR, exist_ok=True)
+        # 1. Initialize Supabase Client
+        self.supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        
         
         # 1. Initialize LLMs
         # Main LLM for Generation
@@ -103,18 +113,19 @@ class AdvancedRAGSystem:
 
         # 2. Initialize Embeddings
         self.embeddings = GoogleGenerativeAIEmbeddings(model=EMBEDDING_MODEL)
+        
+        # Initialize Vector Store (Pointer to Supabase)
+        self.vectorstore = SupabaseVectorStore(
+            client=self.supabase,
+            embedding=self.embeddings,
+            table_name="document_chunks",
+            query_name="match_document_chunks"
+        )
 
         # 3. Initialize Reranker (Cross Encoder)
         # We use a standard efficient cross-encoder from HuggingFace
         self.reranker_model = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-base")
         self.compressor = CrossEncoderReranker(model=self.reranker_model, top_n=TOP_K_RERANK)
-
-        self.vectorstore = Chroma(
-            collection_name="college_rag_collection",
-            embedding_function=self.embeddings,
-            persist_directory=PERSIST_DIRECTORY
-        )
-        self.load_bm25_data()
 
         self.bm25_retrievers = {} #Dictionary to hold a separate retriever for each space
         self.space_docs_map = defaultdict(list) #Map to store documents grouped by space for rebuilding indexes
@@ -204,7 +215,7 @@ class AdvancedRAGSystem:
     #         self.indexed_documents = []
     #         return False
 
-    def load_and_process_pdf(self, file_url: str, space_id: int) -> List[Document]:
+    def load_and_process_pdf(self, file_url: str, db_id: int, space_id: int) -> List[Document]:
         """
         Downloads PDF from a URL (Supabase), processes it safely with Rate Limiting, and cleans up.
         """
@@ -245,6 +256,7 @@ class AdvancedRAGSystem:
                 doc.metadata['source_document'] = filename
                 doc.metadata['space_id'] = space_id
                 doc.metadata['file_url'] = file_url
+                doc.metadata['db_id'] = db_id
 
             # 5. Contextual Embedding (With Rate Limiting)
             print("Generating Contextual Embeddings...")
@@ -324,33 +336,11 @@ class AdvancedRAGSystem:
         with self.index_lock:
             print("--- Updating Partitioned Indexes ---")
             
-            # 1. Update ChromaDB (Incremental)
+            # 1. Update Supabase (Incremental)
             # Unlike FAISS, we just add the new documents to the existing DB
-            print("Adding documents to ChromaDB...")
+            
             self.vectorstore.add_documents(documents)
-            
-            # 2. Update BM25 (Rebuild required for BM25 usually)
-            print("Updating BM25 Partitions...")
-            bm25_map_path = os.path.join(BM25_DATA_DIR, "bm25_docs_map.pkl")
-            
-            # Update the map
-            for doc in documents:
-                space_id = doc.metadata.get('space_id', 'global')
-                self.space_docs_map[space_id].append(doc)
-
-            # Rebuild Retriever for this specific space
-            space_ids_to_update = set(doc.metadata.get('space_id', 'global') for doc in documents)
-            
-            for space_id in space_ids_to_update:
-                docs = self.space_docs_map[space_id]
-                retriever = BM25Retriever.from_documents(docs)
-                retriever.k = TOP_K_RETRIEVAL
-                self.bm25_retrievers[space_id] = retriever
-
-            # Save BM25 Data
-            print("Saving BM25 data to disk...")
-            with open(bm25_map_path, "wb") as f:
-                pickle.dump(self.space_docs_map, f)
+            print(f"Added {len(documents)} documents to Supabase vector store.")
             
             print("Indexing Complete.")
 
@@ -369,35 +359,40 @@ class AdvancedRAGSystem:
         if history_messages:
             search_query = self.contextualize_query(user_query, history_messages)
     
-        # --- STEP 1: Chromadb Retrieval  ---
+        # --- STEP 1: Vector Retrieval (Supabase) ---
+        # We explicitly filter by space_id using metadata
         filter_dict = {'space_id': space_id} if space_id else None
         
-        # We call similarity_search directly instead of using a retriever wrapper
-        chroma_docs = self.vectorstore.similarity_search(
+        vector_docs = self.vectorstore.similarity_search(
             search_query, 
             k=TOP_K_RETRIEVAL, 
             filter=filter_dict
         )
 
-        # --- STEP 2: BM25 Retrieval (Partitioned Lookup) ---
-        bm25_docs = []
-        if space_id:
-            # CASE A: Specific Space
-            # Look up the specific retriever in our dictionary
-            target_retriever = self.bm25_retrievers.get(space_id)
-            if target_retriever:
-                bm25_docs = target_retriever.invoke(search_query)
-            else:
-                print(f"Warning: No BM25 index found for space {space_id} (might be empty).")
-        else:
-            # CASE B: Global Search (Optional fallback)
-            # If no space is specified, we check all partitions
-            for retriever in self.bm25_retrievers.values():
-                bm25_docs.extend(retriever.invoke(search_query))
+        # --- STEP 2: Keyword Retrieval (Supabase Full Text Search) ---
+        # Replaces BM25. We call the RPC function we created in SQL.
+        print("Running Keyword Search via Supabase RPC...")
+        
+        rpc_params = {
+            "query_text": search_query, 
+            "match_count": TOP_K_RETRIEVAL,
+            "filter_space_id": str(space_id) if space_id else None
+        }
+        
+        keyword_response = self.supabase.rpc("kw_match_document_chunks", rpc_params).execute()
+
+        # Convert RPC response back to LangChain Documents
+        keyword_docs = []
+        for item in keyword_response.data:
+            doc = Document(
+                page_content=item['content'],
+                metadata=item['metadata']
+            )
+            keyword_docs.append(doc)
 
         # --- STEP 3: Ensemble (Merge & Deduplicate) ---
         # Combine lists and remove duplicates based on page_content
-        combined_docs_map = {doc.page_content: doc for doc in chroma_docs + bm25_docs}
+        combined_docs_map = {doc.page_content: doc for doc in vector_docs + keyword_docs}
         combined_docs = list(combined_docs_map.values())
 
         if not combined_docs:

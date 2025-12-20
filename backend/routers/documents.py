@@ -53,18 +53,20 @@ async def upload_file(
         public_url = supabase.storage.from_(BUCKET_NAME).get_public_url(file_path_in_bucket)
         print(f"File accessible at: {public_url}")
 
-        # 4. Process RAG (Pass the URL directly)
-        # The updated function in advanced_rag.py now downloads from this URL
-        docs = rag_system.load_and_process_pdf(public_url, space_id)
-        rag_system.build_index(docs)
-
-        # 5. Save to Database
+        # 4. Save to Database
         db_id = db_manager.add_document(
             space_id=space_id, 
             filename=file.filename, 
             file_type='pdf', 
             file_url=public_url  # Storing the HTTP Link
         )
+
+        # 5. Process RAG (Pass the URL directly)
+        # The updated function in advanced_rag.py now downloads from this URL
+        docs = rag_system.load_and_process_pdf(public_url,db_id, space_id)
+        rag_system.build_index(docs)
+
+        
         return {"status": "success", "document_id": db_id, "url": public_url}
     
     except Exception as e:
