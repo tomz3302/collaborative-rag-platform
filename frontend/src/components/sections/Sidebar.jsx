@@ -32,7 +32,7 @@ export const Sidebar = ({
                   "bg-white text-black border-black shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:bg-gray-100",
                   view === 'chat' && "bg-black text-white"
               )}>
-              <Terminal size={18} /> <span className="hidden lg:block font-bold">TERMINAL</span>
+              <Terminal size={18} /> <span className="hidden lg:block font-bold">CHAT</span>
           </button>
 
           <div className="h-px opacity-20 my-4 bg-black" />

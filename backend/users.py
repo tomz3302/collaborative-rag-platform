@@ -5,17 +5,22 @@ from fastapi_users import BaseUserManager, FastAPIUsers, IntegerIDMixin
 from fastapi_users.authentication import AuthenticationBackend, BearerTransport, JWTStrategy
 from db import User, get_user_db
 from fastapi_mail import FastMail, MessageSchema, ConnectionConfig, MessageType
+import os
+from dotenv import load_dotenv
 
-SECRET = "omarrulestheworld123"  # Change this to a strong secret in production # Omar: it is a strong secret lol
+# Load environment variables
+load_dotenv()
+
+SECRET = os.getenv('JWT_SECRET', 'change_this_secret_key')
 
 # 1. SETUP EMAIL CONFIGURATION
-# (Ideally, put these values in your .env file)
+# Loaded from .env file
 mail_conf = ConnectionConfig(
-    MAIL_USERNAME="your_email@gmail.com", 
-    MAIL_PASSWORD="your_app_password",     # Use an "App Password" from Google Security settings
-    MAIL_FROM="your_email@gmail.com",
-    MAIL_PORT=587,
-    MAIL_SERVER="smtp.gmail.com",
+    MAIL_USERNAME=os.getenv('MAIL_USERNAME', 'your_email@gmail.com'),
+    MAIL_PASSWORD=os.getenv('MAIL_PASSWORD', 'your_app_password'),
+    MAIL_FROM=os.getenv('MAIL_FROM', 'your_email@gmail.com'),
+    MAIL_PORT=int(os.getenv('MAIL_PORT', 587)),
+    MAIL_SERVER=os.getenv('MAIL_SERVER', 'smtp.gmail.com'),
     MAIL_STARTTLS=True,
     MAIL_SSL_TLS=False,
     USE_CREDENTIALS=True,

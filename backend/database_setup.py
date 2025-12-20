@@ -2,6 +2,11 @@ import mysql.connector
 from mysql.connector import errorcode
 import logging
 import sys
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # --- Setup Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -9,13 +14,13 @@ logger = logging.getLogger("DB_Setup")
 
 # -------------------------------------------------------------------------
 # DATABASE CONFIGURATION (MySQL)
-# Update these values to match your local MySQL credentials
+# Loaded from .env file
 # -------------------------------------------------------------------------
-DB_HOST = "localhost"
-DB_NAME = "rag"
-DB_USER = "root"
-DB_PASS = ""
-DB_PORT = 3306
+DB_HOST = os.getenv('MYSQL_HOST', 'localhost')
+DB_NAME = os.getenv('MYSQL_DATABASE', 'rag')
+DB_USER = os.getenv('MYSQL_USER', 'root')
+DB_PASS = os.getenv('MYSQL_PASSWORD', '')
+DB_PORT = int(os.getenv('MYSQL_PORT', 3306))
 
 TABLES = {}
 

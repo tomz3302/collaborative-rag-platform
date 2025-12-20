@@ -2,6 +2,11 @@ import psycopg2
 from psycopg2 import sql, extras
 import logging
 import sys
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # --- Setup Logging ---
 logging.basicConfig(level=logging.INFO)
@@ -9,13 +14,13 @@ logger = logging.getLogger("Supabase_Setup")
 
 # -------------------------------------------------------------------------
 # DATABASE CONFIGURATION (Supabase/PostgreSQL)
+# Loaded from .env file
 # -------------------------------------------------------------------------
-# Replace these with values from your Supabase Dashboard
-DB_HOST = "aws-1-eu-central-1.pooler.supabase.com"
-DB_NAME = "postgres"
-DB_USER = "postgres.rrcvxnrtjejetktzkesz"
-DB_PASS = "ZJTyYQhoCteWEN7M"
-DB_PORT = 6543
+DB_HOST = os.getenv('POSTGRES_HOST')
+DB_NAME = os.getenv('POSTGRES_DATABASE', 'postgres')
+DB_USER = os.getenv('POSTGRES_USER')
+DB_PASS = os.getenv('POSTGRES_PASSWORD')
+DB_PORT = int(os.getenv('POSTGRES_PORT', 6543))
 
 TABLES = {}
 

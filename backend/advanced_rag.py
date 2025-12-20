@@ -35,14 +35,21 @@ from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from collections import defaultdict
 
 # --- Configuration ---
-# Ensure you have GOOGLE_API_KEY set in your environment variables
-# os.environ["GOOGLE_API_KEY"] = "your_key_here"
-if "GOOGLE_API_KEY" not in os.environ:
-    print("Error: GOOGLE_API_KEY environment variable not found.")
+# Load API keys from .env or environment variables
+# Priority: .env file > Windows environment variables
+GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
+GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+
+if not GOOGLE_API_KEY:
+    print("Error: GOOGLE_API_KEY not found in .env or environment variables.")
     sys.exit(1)
-if "GROQ_API_KEY" not in os.environ:
-    print("Error: GROQ_API_KEY environment variable not found (needed for Llama 3.3).")
+if not GROQ_API_KEY:
+    print("Error: GROQ_API_KEY not found in .env or environment variables (needed for Llama 3.3).")
     sys.exit(1)
+
+# Set them in os.environ for libraries that expect them there
+os.environ["GOOGLE_API_KEY"] = GOOGLE_API_KEY
+os.environ["GROQ_API_KEY"] = GROQ_API_KEY
 
 # Configuration Constants
 EMBEDDING_MODEL = "models/text-embedding-004"

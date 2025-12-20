@@ -136,6 +136,9 @@ export default function ClarkRAG() {
         const res = await apiFetch(`/api/branches/${branchId}/messages`);
         const data = await res.json();
         
+        // Extract thread_id from the first message (all messages in a branch have same thread_id)
+        const threadId = data.messages.length > 0 ? data.messages[0].thread_id : null;
+        
         // Create a column for the branch view
         const branchColumn = {
             id: branchId,
@@ -143,7 +146,8 @@ export default function ClarkRAG() {
             messages: data.messages || [],
             isTempBranch: false,
             isLoading: false,
-            branchId: branchId // Track for branch continuation
+            branchId: branchId, // Track for branch continuation
+            threadId: threadId  // Track actual thread ID for branching from branches
         };
         
         // Add as a new column to the right instead of replacing all columns
@@ -154,10 +158,15 @@ export default function ClarkRAG() {
   };
 
   const handleDigDeeper = (parentThreadIndex, messageId, threadId) => {
+    const parentColumn = mapColumns[parentThreadIndex];
+    
+    // Use the actual thread_id from the column if it's a branch, otherwise use the passed threadId
+    const actualThreadId = parentColumn.threadId || threadId;
+    
     const tempBranchColumn = {
         id: `temp-${Date.now()}`,
         isTempBranch: true,
-        sourceThreadId: threadId,
+        sourceThreadId: actualThreadId,
         parentMessageId: messageId,
         messages: [],
         title: "New Branch",
@@ -220,6 +229,7 @@ export default function ClarkRAG() {
             if (col.isTempBranch) {
                 col.id = newThreadId;
                 col.isTempBranch = false;
+                col.isBranchColumn = true; // Mark as a branch column to keep input visible
                 col.title = "Branched Thread";
                 col.branchId = responseData.branch_id; // Store for branch continuation
             }

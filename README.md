@@ -126,6 +126,7 @@ Build a collaborative learning environment where:
    - `langchain-chroma`
    - `chromadb`
    - `psycopg2`
+   - `python-dotenv`
 3. **Set up environment variables**
    ```bash
    # Windows PowerShell

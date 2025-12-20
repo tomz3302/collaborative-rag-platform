@@ -111,6 +111,20 @@ async def get_branch_messages_only(
     """Returns only the branch messages without ancestor context."""
     try:
         messages = db_manager.get_branch_messages_only(branch_id)
+        
+        # IMPORTANT: Attach fork/branch data to each message so the frontend can display
+        # branch indicators. This allows users to see and navigate to sub-branches that
+        # were created from messages within this branch (branches from branches).
+        # Without this, the branch view wouldn't show any "Dig Deeper" indicators.
+        if messages:
+            thread_id = messages[0]['thread_id']
+            # Get fork/branch previews for this thread
+            forks_map = db_manager.get_thread_forks(thread_id)
+            
+            # Inject fork data into messages
+            for msg in messages:
+                msg['forks'] = forks_map.get(msg['id'], [])
+        
         return {
             "branch_id": branch_id,
             "messages": messages

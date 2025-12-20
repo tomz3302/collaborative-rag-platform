@@ -82,6 +82,7 @@ export const ChatInterface = ({
             <input
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
+                autoComplete="off"
                 className="w-full border-2 px-10 py-5 text-sm focus:outline-none transition-all font-mono placeholder:opacity-40 bg-gray-50 border-black focus:bg-white focus:shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]"
                 placeholder="Ask Clark..."
             />

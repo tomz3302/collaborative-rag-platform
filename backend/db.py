@@ -4,14 +4,19 @@ from fastapi_users_db_sqlalchemy import SQLAlchemyBaseUserTable, SQLAlchemyUserD
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from sqlalchemy import Column, String, Integer, Boolean
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 # --- CONFIGURATION ---
-# We use the same credentials as your database_setup.py
-DB_USER = "root"
-DB_PASS = ""
-DB_HOST = "localhost"
-DB_PORT = 3306
-DB_NAME = "rag"
+# Loaded from .env file
+DB_USER = os.getenv('MYSQL_USER', 'root')
+DB_PASS = os.getenv('MYSQL_PASSWORD', '')
+DB_HOST = os.getenv('MYSQL_HOST', 'localhost')
+DB_PORT = int(os.getenv('MYSQL_PORT', 3306))
+DB_NAME = os.getenv('MYSQL_DATABASE', 'rag')
 
 # Connection String for SQLAlchemy (Async)
 DATABASE_URL = f"mysql+aiomysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"

@@ -6,18 +6,22 @@ from fastapi.responses import FileResponse
 from dependencies import rag_system, db_manager, STORAGE_DIR
 from users import current_active_user
 from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
 
 router = APIRouter()
 
 # SUPABASE CONFIGURATION
-SUPABASE_URL = os.environ.get("SUPABASE_URL")
-SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
-if "SUPABASE_URL" not in os.environ:
-    print("Error: SUPABASE_URL environment variable not found.")
+if not SUPABASE_URL:
+    print("Error: SUPABASE_URL not found in .env or environment variables.")
     sys.exit(1)
-if "SUPABASE_KEY" not in os.environ:
-    print("Error: SUPABASE_KEY environment variable not found.")
+if not SUPABASE_KEY:
+    print("Error: SUPABASE_KEY not found in .env or environment variables.")
     sys.exit(1)
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 BUCKET_NAME = "course-materials" # Ensure this bucket exists and is set to PUBLIC in Supabase

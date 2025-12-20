@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Minimize2, ArrowRight, MessageSquarePlus } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -16,6 +16,24 @@ export const MindMapOverlay = ({
   sendMessageInColumn,
   onBranchClick
 }) => {
+  // Handle Escape key to close chats from right to left
+  useEffect(() => {
+    const handleEscape = (e) => {
+      if (e.key === 'Escape' && isOpen) {
+        if (mapColumns.length > 1) {
+          // Close the rightmost chat
+          setMapColumns(prev => prev.slice(0, -1));
+        } else {
+          // Close the mindmap view when at the last chat
+          setIsMapOpen(false);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [isOpen, mapColumns.length, setMapColumns, setIsMapOpen]);
+
   return (
     <AnimatePresence>
         {isOpen && (
@@ -114,25 +132,28 @@ export const MindMapOverlay = ({
                                     </div>
                                 )}
 
-                                {/* Input for column */}
-                                <div className="mt-4 pt-4 border-t-2 border-inherit">
-                                    <form
-                                        onSubmit={(e) => {
-                                            e.preventDefault();
-                                            const input = e.target.elements.input;
-                                            sendMessageInColumn(colIndex, input.value);
-                                            input.value = "";
-                                        }}
-                                        className="relative"
-                                    >
-                                        <input
-                                            name="input"
-                                            placeholder={col.isTempBranch ? "Ask away!" : "ask daddy clark..."}
-                                            autoFocus={col.isTempBranch}
-                                            className="w-full border px-3 py-2 text-sm focus:outline-none transition-all font-mono bg-gray-50 border-black focus:bg-white focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
-                                        />
-                                    </form>
-                                </div>
+                                {/* Input for column - show for temp branches and branch columns */}
+                                {(col.isTempBranch || col.isBranchColumn) && (
+                                    <div className="mt-4 pt-4 border-t-2 border-inherit">
+                                        <form
+                                            onSubmit={(e) => {
+                                                e.preventDefault();
+                                                const input = e.target.elements.input;
+                                                sendMessageInColumn(colIndex, input.value);
+                                                input.value = "";
+                                            }}
+                                            className="relative"
+                                        >
+                                            <input
+                                                name="input"
+                                                placeholder="Ask away!"
+                                                autoFocus={col.isTempBranch}
+                                                autoComplete="off"
+                                                className="w-full border px-3 py-2 text-sm focus:outline-none transition-all font-mono bg-gray-50 border-black focus:bg-white focus:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)]"
+                                            />
+                                        </form>
+                                    </div>
+                                )}
                             </MindMapCard>
                         </React.Fragment>
                     ))}
