@@ -103,6 +103,21 @@ async def get_branch_conversation(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/branches/{branch_id}/messages")
+async def get_branch_messages_only(
+    branch_id: int,
+    user: User = Depends(current_active_user)
+):
+    """Returns only the branch messages without ancestor context."""
+    try:
+        messages = db_manager.get_branch_messages_only(branch_id)
+        return {
+            "branch_id": branch_id,
+            "messages": messages
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # NOTE: Currently not used by the frontend.
 # Purpose: Add a user message to a thread WITHOUT triggering an AI response.
 # Use cases: Manual logging, multi-step input, testing, annotations.

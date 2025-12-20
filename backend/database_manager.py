@@ -415,4 +415,25 @@ class DBManager:
         finally:
             conn.close() # Returns connection to pool
 
+    def get_branch_messages_only(self, branch_start_message_id: int) -> List[Dict]:
+        """
+        Fetches only the messages in a branch (starting from the fork question),
+        without including ancestor messages from the main thread.
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        try:
+            # Get all messages with this branch_id (includes the fork start + descendants)
+            query = """
+                SELECT id, thread_id, user_id, role, content, created_at, branch_id
+                FROM messages 
+                WHERE branch_id = %s
+                ORDER BY created_at ASC
+            """
+            cursor.execute(query, (branch_start_message_id,))
+            return cursor.fetchall()
+        finally:
+            cursor.close()
+            conn.close()
+
 

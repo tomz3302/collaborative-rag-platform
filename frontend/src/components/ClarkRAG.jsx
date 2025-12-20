@@ -129,12 +129,11 @@ export default function ClarkRAG() {
     } catch (err) { console.error(err); }
   };
 
-  // Open a specific branch in the Mind Map
+  // Open a specific branch in the Mind Map (adds as new column to the right)
   const openBranchInMap = async (branchId) => {
-    setIsMapOpen(true);
-
     try {
-        const res = await apiFetch(`/api/branches/${branchId}`);
+        // Use the new endpoint that returns only branch messages
+        const res = await apiFetch(`/api/branches/${branchId}/messages`);
         const data = await res.json();
         
         // Create a column for the branch view
@@ -147,7 +146,8 @@ export default function ClarkRAG() {
             branchId: branchId // Track for branch continuation
         };
         
-        setMapColumns([branchColumn]);
+        // Add as a new column to the right instead of replacing all columns
+        setMapColumns(prev => [...prev, branchColumn]);
     } catch (err) { 
         console.error("Error loading branch:", err); 
     }
