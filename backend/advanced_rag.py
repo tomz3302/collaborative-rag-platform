@@ -363,21 +363,39 @@ class AdvancedRAGSystem:
     
         # --- STEP 1: Vector Retrieval (Supabase) ---
         # We explicitly filter by space_id using metadata
-        filter_dict = {'space_id': space_id} if space_id else None
+        vector_docs = []
         
-        print(f"DEBUG: Running vector search with filter: {filter_dict}")
         try:
-            vector_docs = self.vectorstore.similarity_search(
-                search_query, 
-                k=TOP_K_RETRIEVAL, 
-                filter=filter_dict
-            )
-            print(f"DEBUG: Vector search returned {len(vector_docs)} documents")
+            # 1. Generate the embedding vector for the query
+            query_vector = self.embeddings.embed_query(search_query)
+            
+            # 2. Prepare params for the SQL function
+            params = {
+                "query_embedding": query_vector,
+                "match_threshold": 0.5, # Adjust this threshold as needed
+                "match_count": TOP_K_RETRIEVAL,
+                "filter": {'space_id': space_id} if space_id else {}
+            }
+            
+            # 3. Execute RPC
+            response = self.supabase.rpc("match_document_chunks", params).execute()
+            
+            # 4. Convert results to LangChain Documents
+            if response.data:
+                for item in response.data:
+                    doc = Document(
+                        page_content=item['content'],
+                        metadata=item['metadata']
+                    )
+                    vector_docs.append(doc)
+            
+            print(f"DEBUG: Vector RPC returned {len(vector_docs)} documents")
+            
         except Exception as e:
-            print(f"ERROR in vector search: {type(e).__name__}: {str(e)}")
-            print(f"ERROR details: {repr(e)}")
+            print(f"Vector Error: {e}")
             vector_docs = []
 
+            
         # --- STEP 2: Keyword Retrieval (Supabase Full Text Search) ---
         # Replaces BM25. We call the RPC function we created in SQL.
         print("Running Keyword Search via Supabase RPC...")
@@ -387,13 +405,8 @@ class AdvancedRAGSystem:
             "match_count": TOP_K_RETRIEVAL,
             "filter_space_id": space_id  # Pass as int or None, not string
         }
-        
-        print(f"DEBUG: RPC params: {rpc_params}")
-        
         try:
             keyword_response = self.supabase.rpc("kw_match_document_chunks", rpc_params).execute()
-            print(f"DEBUG: RPC response status: {keyword_response}")
-            print(f"DEBUG: RPC returned {len(keyword_response.data) if keyword_response.data else 0} documents")
         except Exception as e:
             print(f"ERROR in RPC call: {type(e).__name__}: {str(e)}")
             print(f"ERROR details: {repr(e)}")
