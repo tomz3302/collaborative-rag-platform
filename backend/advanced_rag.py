@@ -48,6 +48,8 @@ load_dotenv()
 # Priority: .env file > Windows environment variables
 GOOGLE_API_KEY = os.getenv('GOOGLE_API_KEY')
 GROQ_API_KEY = os.getenv('GROQ_API_KEY')
+SUPABASE_URL= os.getenv("SUPABASE_URL")
+SUPABASE_KEY= os.getenv("SUPABASE_KEY")
 
 if not GOOGLE_API_KEY:
     print("Error: GOOGLE_API_KEY not found in .env or environment variables.")
@@ -363,11 +365,18 @@ class AdvancedRAGSystem:
         # We explicitly filter by space_id using metadata
         filter_dict = {'space_id': space_id} if space_id else None
         
-        vector_docs = self.vectorstore.similarity_search(
-            search_query, 
-            k=TOP_K_RETRIEVAL, 
-            filter=filter_dict
-        )
+        print(f"DEBUG: Running vector search with filter: {filter_dict}")
+        try:
+            vector_docs = self.vectorstore.similarity_search(
+                search_query, 
+                k=TOP_K_RETRIEVAL, 
+                filter=filter_dict
+            )
+            print(f"DEBUG: Vector search returned {len(vector_docs)} documents")
+        except Exception as e:
+            print(f"ERROR in vector search: {type(e).__name__}: {str(e)}")
+            print(f"ERROR details: {repr(e)}")
+            vector_docs = []
 
         # --- STEP 2: Keyword Retrieval (Supabase Full Text Search) ---
         # Replaces BM25. We call the RPC function we created in SQL.
@@ -376,37 +385,60 @@ class AdvancedRAGSystem:
         rpc_params = {
             "query_text": search_query, 
             "match_count": TOP_K_RETRIEVAL,
-            "filter_space_id": str(space_id) if space_id else None
+            "filter_space_id": space_id  # Pass as int or None, not string
         }
         
-        keyword_response = self.supabase.rpc("kw_match_document_chunks", rpc_params).execute()
+        print(f"DEBUG: RPC params: {rpc_params}")
+        
+        try:
+            keyword_response = self.supabase.rpc("kw_match_document_chunks", rpc_params).execute()
+            print(f"DEBUG: RPC response status: {keyword_response}")
+            print(f"DEBUG: RPC returned {len(keyword_response.data) if keyword_response.data else 0} documents")
+        except Exception as e:
+            print(f"ERROR in RPC call: {type(e).__name__}: {str(e)}")
+            print(f"ERROR details: {repr(e)}")
+            keyword_response = None
 
         # Convert RPC response back to LangChain Documents
         keyword_docs = []
-        for item in keyword_response.data:
-            doc = Document(
-                page_content=item['content'],
-                metadata=item['metadata']
-            )
-            keyword_docs.append(doc)
+        if keyword_response and keyword_response.data:
+            for item in keyword_response.data:
+                doc = Document(
+                    page_content=item['content'],
+                    metadata=item['metadata']
+                )
+                keyword_docs.append(doc)
+        
+        print(f"DEBUG: Converted {len(keyword_docs)} keyword documents")
 
         # --- STEP 3: Ensemble (Merge & Deduplicate) ---
         # Combine lists and remove duplicates based on page_content
         combined_docs_map = {doc.page_content: doc for doc in vector_docs + keyword_docs}
         combined_docs = list(combined_docs_map.values())
+        
+        print(f"DEBUG: Combined {len(combined_docs)} unique documents")
 
         if not combined_docs:
+            print("DEBUG: No documents found, returning empty response")
             return {"answer": "I couldn't find relevant information in this space.", "source_document": None}
 
         # --- STEP 4: Reranking (Cross Encoder) ---
         # We manually call the compressor on our combined list
-        reranked_docs = self.compressor.compress_documents(
-            documents=combined_docs, 
-            query=search_query
-        )
+        print(f"DEBUG: Reranking {len(combined_docs)} documents...")
+        try:
+            reranked_docs = self.compressor.compress_documents(
+                documents=combined_docs, 
+                query=search_query
+            )
+            print(f"DEBUG: Reranking returned {len(reranked_docs)} documents")
+        except Exception as e:
+            print(f"ERROR in reranking: {type(e).__name__}: {str(e)}")
+            print(f"ERROR details: {repr(e)}")
+            reranked_docs = combined_docs[:TOP_K_RERANK]  # Fallback to top N without reranking
 
         if not reranked_docs:
-             return {"answer": "Found documents, but they weren't relevant enough.", "source_document": None}
+            print("DEBUG: No documents after reranking, returning empty response")
+            return {"answer": "Found documents, but they weren't relevant enough.", "source_document": None}
 
         # --- STEP 5: Prepare Context & LLM (Standard Logic) ---
         
@@ -458,14 +490,25 @@ class AdvancedRAGSystem:
 
         chain = prompt | self.llm | StrOutputParser()
 
-        response_text = chain.invoke({
-            "context": context_text,
-            "question": user_query
-        })
+        print(f"DEBUG: Invoking LLM with context length: {len(context_text)} chars")
+        try:
+            response_text = chain.invoke({
+                "context": context_text,
+                "question": user_query
+            })
+            print(f"DEBUG: LLM response length: {len(response_text)} chars")
+        except Exception as e:
+            print(f"ERROR in LLM call: {type(e).__name__}: {str(e)}")
+            print(f"ERROR details: {repr(e)}")
+            return {
+                "answer": "An error occurred while generating the response.",
+                "source_document": top_source_filename,
+                "error": str(e)
+            }
 
         # Debug print
         print({
-            "answer": response_text,
+            "answer": response_text[:200] + "..." if len(response_text) > 200 else response_text,
             "source_document": top_source_filename,
             "top_chunk_page_content": top_doc.page_content[:200] + "..." 
         })

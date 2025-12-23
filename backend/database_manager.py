@@ -1,17 +1,21 @@
-import mysql.connector
-from mysql.connector import pooling
+import psycopg2
+from psycopg2 import pool
+from psycopg2.extras import RealDictCursor
 import logging
 from typing import List, Dict, Optional
+import os
+from dotenv import load_dotenv
 
-# Configuration
+# Load environment variables
+load_dotenv()
+
+# Configuration for Supabase (PostgreSQL)
 DB_CONFIG = {
-    'user': 'root',
-    'password': '',  # Update this
-    'host': 'localhost',
-    'port': 3306,
-    'database': 'rag',
-    'pool_name': "rag_pool",
-    'pool_size': 20
+    'user': os.getenv('POSTGRES_USER'),
+    'password': os.getenv('POSTGRES_PASSWORD'),
+    'host': os.getenv('POSTGRES_HOST'),
+    'port': int(os.getenv('POSTGRES_PORT', 6543)),
+    'database': os.getenv('POSTGRES_DATABASE', 'postgres')
 }
 
 logger = logging.getLogger("DB_Manager")
@@ -19,10 +23,10 @@ logger = logging.getLogger("DB_Manager")
 
 class DBManager:
     def __init__(self):
-        self.pool = mysql.connector.pooling.MySQLConnectionPool(**DB_CONFIG)
+        self.pool = psycopg2.pool.SimpleConnectionPool(1, 20, **DB_CONFIG)
 
     def get_connection(self):
-        return self.pool.get_connection()
+        return self.pool.getconn()
 
     # --- THREADS ---
     def create_thread(self, space_id: int, title: str, creator_id: int) -> int:
@@ -32,19 +36,20 @@ class DBManager:
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
-            # Added space_id to the INSERT statement
-            query = "INSERT INTO threads (space_id, title, creator_user_id) VALUES (%s, %s, %s)"
+            # PostgreSQL uses RETURNING to get the new ID
+            query = "INSERT INTO threads (space_id, title, creator_user_id) VALUES (%s, %s, %s) RETURNING id"
             cursor.execute(query, (space_id, title, creator_id))
+            thread_id = cursor.fetchone()[0]
             conn.commit()
-            return cursor.lastrowid
+            return thread_id
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     def get_threads_for_space(self, space_id: int) -> List[Dict]:
         """(New) Gets all conversations in a specific workspace."""
         conn = self.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         try:
             query = """
                 SELECT id, title, creator_user_id, created_at
@@ -56,7 +61,7 @@ class DBManager:
             return cursor.fetchall()
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     def get_last_message_id(self, thread_id: int, branch_id: int = None) -> Optional[int]:
         """
@@ -79,7 +84,7 @@ class DBManager:
             return result[0] if result else None
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     # --- MESSAGES & FORKING LOGIC ---
     def add_message(self, thread_id: int, user_id: int, role: str, content: str,
@@ -111,8 +116,13 @@ class DBManager:
             # If it's a normal reply, we inherit. If it's a fork start, we set NULL (to fill later)
             initial_branch_val = None if is_fork_start else inherited_branch_id
 
+            # PostgreSQL: Add RETURNING to get the new ID
+            insert_query = """
+                INSERT INTO messages (thread_id, user_id, role, content, path, parent_message_id, branch_id) 
+                VALUES (%s, %s, %s, %s, '', %s, %s) RETURNING id
+            """
             cursor.execute(insert_query, (thread_id, user_id, role, content, parent_message_id, initial_branch_val))
-            new_msg_id = cursor.lastrowid
+            new_msg_id = cursor.fetchone()[0]
 
             # 3. Calculate Final Path & Branch ID
             new_path = f"{parent_path}{new_msg_id}/" if parent_message_id else f"{new_msg_id}/"
@@ -128,7 +138,7 @@ class DBManager:
             return new_msg_id
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     # --- CONTEXT RETRIEVAL (MEMORY) ---
     def get_context_messages(self, parent_message_id: int) -> List[Dict]:
@@ -140,7 +150,7 @@ class DBManager:
             return []
 
         conn = self.get_connection()
-        cursor = conn.cursor(dictionary=True)  # Return dicts for easy parsing
+        cursor = conn.cursor(cursor_factory=RealDictCursor)  # Return dicts for easy parsing
         try:
             # 1. Get the path of the parent message
             cursor.execute("SELECT path FROM messages WHERE id = %s", (parent_message_id,))
@@ -171,7 +181,7 @@ class DBManager:
             return cursor.fetchall()
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     def get_documents_for_space(self, space_id: int) -> List[Dict]:
         """
@@ -179,7 +189,7 @@ class DBManager:
         Now returns documents only for a specific Space.
         """
         conn = self.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         try:
             query = """
                 SELECT id, filename, file_type, file_url, uploaded_at
@@ -191,7 +201,7 @@ class DBManager:
             return cursor.fetchall()
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     def get_document_id_by_filename(self, space_id: int, filename: str) -> Optional[int]:
         """
@@ -207,7 +217,7 @@ class DBManager:
             return result[0] if result else None
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     def add_document(self, space_id: int, filename: str, file_type: str, file_url: str) -> int:
         """
@@ -219,30 +229,32 @@ class DBManager:
         try:
             query = """
                 INSERT INTO documents (space_id, filename, file_type, file_url) 
-                VALUES (%s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s) RETURNING id
             """
             cursor.execute(query, (space_id, filename, file_type, file_url))
+            doc_id = cursor.fetchone()[0]
             conn.commit()
-            return cursor.lastrowid
+            return doc_id
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
 
     def link_thread_to_doc(self, thread_id, doc_id, page_num=1):
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
-            # We use INSERT IGNORE to avoid crashing if link already exists
+            # PostgreSQL uses ON CONFLICT DO NOTHING instead of INSERT IGNORE
             query = """
-                INSERT IGNORE INTO context_anchors (thread_id, document_id, page_number)
+                INSERT INTO context_anchors (thread_id, document_id, page_number)
                 VALUES (%s, %s, %s)
+                ON CONFLICT (thread_id, document_id, page_number) DO NOTHING
             """
             cursor.execute(query, (thread_id, doc_id, page_num))
             conn.commit()
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     def get_thread_with_messages(self, thread_id: int) -> Optional[Dict]:
         """
@@ -251,7 +263,7 @@ class DBManager:
         Returns a dictionary with thread info and list of messages.
         """
         conn = self.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         try:
             # Get thread info
             thread_query = """
@@ -285,24 +297,24 @@ class DBManager:
             return thread
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     def get_threads_for_document(self, document_id: int) -> List[Dict]:
         """Retrieves all threads associated with a specific document, 
         resolving the creator's name instead of ID.
         """
         conn = self.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         try:
             # Changes made:
             # 1. Selected 'u.full_name' instead of 't.creator_user_id'
-            # 2. Added 'INNER JOIN users u ON t.creator_user_id = u.id'
+            # 2. Added 'INNER JOIN "user" u ON t.creator_user_id = u.id'
             query = """
                 SELECT t.id, t.title, u.full_name AS user, t.created_at,
                     ca.page_number
                 FROM threads t
                 INNER JOIN context_anchors ca ON t.id = ca.thread_id
-                INNER JOIN user u ON t.creator_user_id = u.id
+                INNER JOIN "user" u ON t.creator_user_id = u.id
                 WHERE ca.document_id = %s
                 ORDER BY ca.page_number ASC, t.created_at DESC
             """
@@ -310,42 +322,43 @@ class DBManager:
             return cursor.fetchall()
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
     def create_space(self, name: str, description: str = None) -> int:
         """Creates a new workspace (e.g., 'Legal Team', 'Project Alpha')."""
         conn = self.get_connection()
         cursor = conn.cursor()
         try:
-            query = "INSERT INTO spaces (name, description) VALUES (%s, %s)"
+            query = "INSERT INTO spaces (name, description) VALUES (%s, %s) RETURNING id"
             cursor.execute(query, (name, description))
+            space_id = cursor.fetchone()[0]
             conn.commit()
-            return cursor.lastrowid
+            return space_id
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     def get_spaces(self) -> List[Dict]:
         """Lists all available workspaces."""
         conn = self.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         try:
             cursor.execute("SELECT * FROM spaces ORDER BY created_at DESC")
             return cursor.fetchall()
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
 
     def get_message_by_id(self, message_id: int) -> Optional[Dict]:
         """Helper to fetch a single message."""
         conn = self.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         try:
             cursor.execute("SELECT * FROM messages WHERE id = %s", (message_id,))
             return cursor.fetchone()
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
     # --- FORKING LOGIC (Fixed & Pooled) ---
     def get_thread_forks(self, thread_id: int) -> Dict[int, List[Dict]]:
@@ -353,7 +366,7 @@ class DBManager:
         Retrieves all fork start messages for a thread, grouped by their parent message.
         """
         conn = self.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         try:
             query = """
                 SELECT id, parent_message_id, content, created_at
@@ -378,7 +391,7 @@ class DBManager:
             return forks_map
         finally:
             cursor.close()
-            conn.close() # Returns connection to pool
+            self.pool.putconn(conn) # Returns connection to pool
 
     def get_branch_full_view(self, branch_start_message_id: int) -> List[Dict]:
         """
@@ -400,7 +413,7 @@ class DBManager:
             ancestors = self.get_context_messages(start_msg['parent_message_id'])
 
             # 3. Get branch descendants using the current connection
-            cursor = conn.cursor(dictionary=True)
+            cursor = conn.cursor(cursor_factory=RealDictCursor)
             branch_query = """
                 SELECT * FROM messages 
                 WHERE thread_id = %s AND branch_id = %s
@@ -413,7 +426,7 @@ class DBManager:
             # Combine: Ancestors -> Fork Start -> Children of Fork
             return ancestors + [start_msg] + branch_descendants
         finally:
-            conn.close() # Returns connection to pool
+            self.pool.putconn(conn) # Returns connection to pool
 
     def get_branch_messages_only(self, branch_start_message_id: int) -> List[Dict]:
         """
@@ -421,7 +434,7 @@ class DBManager:
         without including ancestor messages from the main thread.
         """
         conn = self.get_connection()
-        cursor = conn.cursor(dictionary=True)
+        cursor = conn.cursor(cursor_factory=RealDictCursor)
         try:
             # Get all messages with this branch_id (includes the fork start + descendants)
             query = """
@@ -434,6 +447,6 @@ class DBManager:
             return cursor.fetchall()
         finally:
             cursor.close()
-            conn.close()
+            self.pool.putconn(conn)
 
 

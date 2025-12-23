@@ -24,6 +24,21 @@ DB_PORT = int(os.getenv('POSTGRES_PORT', 6543))
 
 TABLES = {}
 
+# 0. USER TABLE (for FastAPI-Users authentication)
+TABLES['user'] = (
+    """
+    CREATE TABLE IF NOT EXISTS "user" (
+        id SERIAL PRIMARY KEY,
+        email VARCHAR(320) NOT NULL UNIQUE,
+        hashed_password VARCHAR(1024) NOT NULL,
+        is_active BOOLEAN NOT NULL DEFAULT TRUE,
+        is_superuser BOOLEAN NOT NULL DEFAULT FALSE,
+        is_verified BOOLEAN NOT NULL DEFAULT FALSE,
+        full_name VARCHAR(100)
+    )
+    """
+)
+
 # 1. SPACES TABLE
 # MySQL AUTO_INCREMENT -> Postgres SERIAL
 TABLES['spaces'] = (

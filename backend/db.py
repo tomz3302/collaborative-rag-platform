@@ -10,16 +10,18 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-# --- CONFIGURATION ---
+# -------------------------------------------------------------------------
+# DATABASE CONFIGURATION (Supabase/PostgreSQL)
 # Loaded from .env file
-DB_USER = os.getenv('MYSQL_USER', 'root')
-DB_PASS = os.getenv('MYSQL_PASSWORD', '')
-DB_HOST = os.getenv('MYSQL_HOST', 'localhost')
-DB_PORT = int(os.getenv('MYSQL_PORT', 3306))
-DB_NAME = os.getenv('MYSQL_DATABASE', 'rag')
+# -------------------------------------------------------------------------
+DB_HOST = os.getenv('POSTGRES_HOST')
+DB_NAME = os.getenv('POSTGRES_DATABASE', 'postgres')
+DB_USER = os.getenv('POSTGRES_USER')
+DB_PASS = os.getenv('POSTGRES_PASSWORD')
+DB_PORT = int(os.getenv('POSTGRES_PORT', 6543))
 
-# Connection String for SQLAlchemy (Async)
-DATABASE_URL = f"mysql+aiomysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+# Connection String for SQLAlchemy (Async) - PostgreSQL with SSL for Supabase
+DATABASE_URL = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}?ssl=require"
 
 class Base(DeclarativeBase):
     pass
@@ -30,7 +32,13 @@ class User(SQLAlchemyBaseUserTable[int], Base):
     full_name = Column(String(length=100), nullable=True)
     # The library automatically adds: email, hashed_password, is_active, etc.
 
-engine = create_async_engine(DATABASE_URL)
+engine = create_async_engine(
+    DATABASE_URL,
+    connect_args={
+        "prepared_statement_cache_size": 0,  # Disables prepared statements
+        "statement_cache_size": 0,           # Ensures no caching happens
+    }
+)
 async_session_maker = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:

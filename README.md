@@ -127,6 +127,8 @@ Build a collaborative learning environment where:
    - `chromadb`
    - `psycopg2`
    - `python-dotenv`
+   - ` psycopg2-binary`
+   - `asyncpg`
 3. **Set up environment variables**
    ```bash
    # Windows PowerShell

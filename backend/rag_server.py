@@ -23,18 +23,35 @@ FRONTEND_DIST = os.path.join(BASE_DIR, "frontend", "dist")
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: Create the Auth Tables (Users) if they don't exist
-    from db import engine, Base
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    # NOTE: You can skip this if you've already run supabase_sql_setup.py
+    SKIP_AUTH_TABLE_CREATION = os.getenv('SKIP_AUTH_TABLE_CREATION', 'false').lower() == 'true'
+    
+    if not SKIP_AUTH_TABLE_CREATION:
+        from db import engine, Base, DATABASE_URL
+        try:
+            logger.info("Connecting to database and creating auth tables...")
+            logger.info(f"Database URL: {DATABASE_URL.replace(DATABASE_URL.split('@')[0].split('//')[1], '***')}")
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            logger.info("✅ Database connection successful and auth tables ready")
+        except Exception as e:
+            logger.error(f"❌ Database connection failed: {e}")
+            logger.error("To skip auth table creation on startup, add SKIP_AUTH_TABLE_CREATION=true to .env")
+            logger.error("Then run: python supabase_sql_setup.py to create tables manually")
+            raise
+    else:
+        logger.info("⏭️  Skipping auth table creation (SKIP_AUTH_TABLE_CREATION=true)")
     
     logger.info("Application started successfully")
     
     yield  # Server runs here
     
     # Shutdown: Close database connections gracefully
-    logger.info("Shutting down gracefully...")
-    await engine.dispose()
-    logger.info("Database connections closed")
+    if not SKIP_AUTH_TABLE_CREATION:
+        from db import engine
+        logger.info("Shutting down gracefully...")
+        await engine.dispose()
+        logger.info("Database connections closed")
 
 # --- FastAPI App ---
 app = FastAPI(title="Clark", lifespan=lifespan)

@@ -5,6 +5,12 @@ import sys
 import os
 from dotenv import load_dotenv
 
+# ===========================================================================
+# ⚠️ DEPRECATED: This file is for LOCAL MYSQL SETUP ONLY
+# ⚠️ The project now uses SUPABASE (PostgreSQL)
+# ⚠️ Use supabase_sql_setup.py instead for production setup
+# ===========================================================================
+
 # Load environment variables
 load_dotenv()
 
@@ -13,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("DB_Setup")
 
 # -------------------------------------------------------------------------
-# DATABASE CONFIGURATION (MySQL)
+# DATABASE CONFIGURATION (MySQL - LOCAL ONLY)
 # Loaded from .env file
 # -------------------------------------------------------------------------
 DB_HOST = os.getenv('MYSQL_HOST', 'localhost')
