@@ -1,0 +1,41 @@
+# Core Framework
+fastapi
+uvicorn
+
+# Authentication & Security
+fastapi-users
+fastapi-users-db-sqlalchemy
+python-jose[cryptography]
+
+# Email
+fastapi-mail
+
+# Database
+psycopg2-binary
+sqlalchemy
+aiosqlite
+asyncpg
+
+# MySQL (for database_setup.py - deprecated but kept for legacy)
+mysql-connector-python
+
+# Supabase
+supabase
+
+# LangChain Packages
+langchain-classic
+langchain-community
+langchain-core
+langchain-text-splitters
+langchain-google-genai
+langchain-groq
+
+# Document Processing
+pypdf
+
+# Utilities
+python-dotenv
+requests
+pydantic
+
+sentence-transformers

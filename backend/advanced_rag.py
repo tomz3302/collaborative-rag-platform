@@ -1,7 +1,7 @@
 import os
 import random
 import sys
-import pickle
+# import pickle  # UNUSED
 import time
 from typing import List, Dict, Any
 import tempfile # To create temporary files during download
@@ -14,7 +14,7 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_chroma import Chroma
+# from langchain_chroma import Chroma  # UNUSED - using SupabaseVectorStore instead
 
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -23,10 +23,10 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings, ChatGoogleGener
 # groq
 from langchain_groq import ChatGroq
 # Vector Store & Retrieval
-from langchain_community.vectorstores import FAISS
-from langchain_community.retrievers import BM25Retriever
+# from langchain_community.vectorstores import FAISS  # UNUSED - using SupabaseVectorStore instead
+# from langchain_community.retrievers import BM25Retriever  # UNUSED - using Supabase RPC instead
 # Ensemble and ContextualCompression are in the main 'langchain' package
-from langchain_classic.retrievers.ensemble import EnsembleRetriever
+# from langchain_classic.retrievers.ensemble import EnsembleRetriever  # UNUSED - manual merging instead
 
 from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
 

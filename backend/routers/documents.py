@@ -1,5 +1,5 @@
 import os
-import shutil
+# import shutil  # UNUSED
 import sys
 from fastapi import APIRouter, UploadFile, File, Query, HTTPException, Depends
 from fastapi.responses import FileResponse

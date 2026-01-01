@@ -8,6 +8,7 @@ import { Sidebar } from './sections/Sidebar';
 import { ChatInterface } from './sections/ChatInterface';
 import { DocumentInterface } from './sections/DocumentInterface';
 import { MindMapOverlay } from './sections/MindMapOverlay';
+import { PixelLoader } from './ui/PixelLoader';
 
 export default function ClarkRAG() {
   const { spaceId } = useParams();
@@ -17,6 +18,7 @@ export default function ClarkRAG() {
   const [view, setView] = useState('chat'); // 'chat' | 'document'
   const [documents, setDocuments] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoadingDocs, setIsLoadingDocs] = useState(true);
 
   // General Chat
   const [messages, setMessages] = useState([]);
@@ -43,11 +45,15 @@ export default function ClarkRAG() {
   };
 
   const fetchDocuments = async () => {
+    setIsLoadingDocs(true);
     try {
       const res = await apiFetch(`/api/documents?space_id=${spaceId}`);
       const data = await res.json();
       setDocuments(data.documents || []);
     } catch (err) { console.error("API Error", err); }
+    finally {
+      setIsLoadingDocs(false);
+    }
   };
 
   const handleFileUpload = async (e) => {
@@ -259,23 +265,31 @@ export default function ClarkRAG() {
     // Light Mode Wrapper
     <div className="w-full h-screen bg-white transition-colors duration-200 overflow-hidden font-mono text-black">
 
-      {/* BACKGROUND & SIDEBAR */}
-      <div className={cn(
-          "flex h-full w-full transition-all duration-300",
-          isMapOpen ? "opacity-20 pointer-events-none grayscale" : ""
-        )}>
+      {/* LOADING STATE */}
+      {isLoadingDocs ? (
+        <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+          <PixelLoader />
+          <p className="text-sm text-gray-600">Loading space documents...</p>
+        </div>
+      ) : (
+        <>
+          {/* BACKGROUND & SIDEBAR */}
+          <div className={cn(
+              "flex h-full w-full transition-all duration-300",
+              isMapOpen ? "opacity-20 pointer-events-none grayscale" : ""
+            )}>
 
-          {/* SIDEBAR MODULE */}
-          <Sidebar
-            view={view}
-            setView={setView}
-            documents={documents}
-            currentDoc={currentDoc}
-            openDocument={openDocument}
-            isUploading={isUploading}
-            handleFileUpload={handleFileUpload}
-            onExit={handleExit}
-          />
+              {/* SIDEBAR MODULE */}
+              <Sidebar
+                view={view}
+                setView={setView}
+                documents={documents}
+                currentDoc={currentDoc}
+                openDocument={openDocument}
+                isUploading={isUploading}
+                handleFileUpload={handleFileUpload}
+                onExit={handleExit}
+              />
 
           {/* MAIN CONTENT AREA */}
           <main className="flex-1 flex relative bg-white">
@@ -301,16 +315,18 @@ export default function ClarkRAG() {
           </main>
       </div>
 
-      {/* MIND MAP OVERLAY MODULE */}
-      <MindMapOverlay
-        isOpen={isMapOpen}
-        setIsMapOpen={setIsMapOpen}
-        mapColumns={mapColumns}
-        setMapColumns={setMapColumns}
-        handleDigDeeper={handleDigDeeper}
-        sendMessageInColumn={sendMessageInColumn}
-        onBranchClick={openBranchInMap}
-      />
+          {/* MIND MAP OVERLAY MODULE */}
+          <MindMapOverlay
+            isOpen={isMapOpen}
+            setIsMapOpen={setIsMapOpen}
+            mapColumns={mapColumns}
+            setMapColumns={setMapColumns}
+            handleDigDeeper={handleDigDeeper}
+            sendMessageInColumn={sendMessageInColumn}
+            onBranchClick={openBranchInMap}
+          />
+        </>
+      )}
 
     </div>
   );

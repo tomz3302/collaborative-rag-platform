@@ -1,0 +1,49 @@
+# Python cache and compiled files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments (if any exist locally)
+venv/
+env/
+ENV/
+.venv
+
+# Local storage and data directories
+storage/*
+bm25_data/*
+chroma_db/*
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git files
+.git/
+.gitignore
+
+# Documentation and markdown (optional)
+*.md
+README.md
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Logs
+*.log
+
+# Database files (local only)
+*.db
+*.sqlite
+*.sqlite3
+
+# Note: .env is NOT ignored - it's needed for your environment variables
+# Make sure your .env file is present when building the container
