@@ -39,6 +39,10 @@ from supabase import create_client, Client
 from langchain_community.vectorstores import SupabaseVectorStore
 
 
+#Extras
+from services.document_processor import DocumentProcessorService
+
+
 # Load environment variables
 from dotenv import load_dotenv
 load_dotenv()
@@ -109,7 +113,7 @@ class AdvancedRAGSystem:
         # 2. Contextualizer LLM (Using Llama 3.3 again, or you can use llama-3.1-8b-instant for speed)
         # We will use 70b here too because Groq is fast enough to handle it.
         self.contextualizer_llm = ChatGroq(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             temperature=0.0
         )
 
@@ -129,210 +133,20 @@ class AdvancedRAGSystem:
         self.reranker_model = HuggingFaceCrossEncoder(model_name="BAAI/bge-reranker-base")
         self.compressor = CrossEncoderReranker(model=self.reranker_model, top_n=TOP_K_RERANK)
 
+
+        self.doc_processor = DocumentProcessorService(self.contextualizer_llm)
+
         self.bm25_retrievers = {} #Dictionary to hold a separate retriever for each space
         self.space_docs_map = defaultdict(list) #Map to store documents grouped by space for rebuilding indexes
         print("System Initialized.")
     
-    def load_bm25_data(self):
-        """Loads the BM25 data from pickle files."""
-        bm25_map_path = os.path.join(BM25_DATA_DIR, "bm25_docs_map.pkl")
-        
-        if os.path.exists(bm25_map_path):
-            try:
-                print("Loading BM25 partitions...")
-                with open(bm25_map_path, "rb") as f:
-                    self.space_docs_map = pickle.load(f)
-                
-                # Rebuild Retrievers
-                for space_id, docs in self.space_docs_map.items():
-                    retriever = BM25Retriever.from_documents(docs)
-                    retriever.k = TOP_K_RETRIEVAL
-                    self.bm25_retrievers[space_id] = retriever
-                print("BM25 Data Loaded.")
-            except Exception as e:
-                print(f"Error loading BM25: {e}")
-                self.space_docs_map = defaultdict(list)
-
-    # def load_existing_embeddings(self):
-    #     """
-    #     Load previously saved Partitioned embeddings from disk.
-    #     """
-    #     faiss_index_path = os.path.join(EMBEDDINGS_DIR, "faiss_index")
-    #     bm25_map_path = os.path.join(EMBEDDINGS_DIR, "bm25_docs_map.pkl")
-    #     indexed_docs_path = os.path.join(EMBEDDINGS_DIR, "indexed_documents.pkl")
-        
-    #     if not os.path.exists(faiss_index_path):
-    #         print("No existing embeddings found.")
-    #         return False
-        
-    #     try:
-    #         print("Loading existing embeddings from disk...")
-            
-    #         # 1. Load FAISS index
-    #         self.vectorstore = FAISS.load_local(
-    #             faiss_index_path, 
-    #             self.embeddings,
-    #             allow_dangerous_deserialization=True
-    #         )
-            
-    #         # 2. Load BM25 Partitions
-    #         self.bm25_retrievers = {}
-    #         self.space_docs_map = defaultdict(list)
-
-    #         if os.path.exists(bm25_map_path):
-    #             print("Loading BM25 partitions...")
-    #             with open(bm25_map_path, "rb") as f:
-    #                 self.space_docs_map = pickle.load(f)
-                
-    #             # Re-instantiate a retriever for each space
-    #             for space_id, docs in self.space_docs_map.items():
-    #                 retriever = BM25Retriever.from_documents(docs)
-    #                 retriever.k = TOP_K_RETRIEVAL
-    #                 self.bm25_retrievers[space_id] = retriever
-    #         else:
-    #             print("Warning: BM25 map not found.")
-
-    #         # 3. Load indexed documents list
-    #         if os.path.exists(indexed_docs_path):
-    #             with open(indexed_docs_path, "rb") as f:
-    #                 self.indexed_documents = pickle.load(f)
-            
-    #         print(f"Successfully loaded embeddings for {len(self.indexed_documents)} document(s).")
-    #         return True
-            
-    #     except Exception as e:
-    #         print(f"Error loading embeddings: {str(e)}")
-    #         # Reset state on failure
-    #         self.vectorstore = None
-    #         self.bm25_retrievers = {}
-    #         self.space_docs_map = defaultdict(list)
-    #         self.indexed_documents = []
-    #         return False
-            
-    #     except Exception as e:
-    #         print(f"Error loading embeddings: {str(e)}")
-    #         print("Will start with empty index.")
-    #         self.vectorstore = None
-    #         self.retriever = None
-    #         self.indexed_documents = []
-    #         return False
 
     def load_and_process_pdf(self, file_url: str, db_id: int, space_id: int) -> List[Document]:
         """
         Downloads PDF from a URL (Supabase), processes it safely with Rate Limiting, and cleans up.
         """
-        # Extract filename from URL (simple split)
-        filename = file_url.split('/')[-1].split('?')[0] # Handles query params if any
-        print(f"--- Downloading from URL: {file_url} ---")
-
-        # 1. Create a temporary file
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
-            local_temp_path = temp_file.name
-
-        try:
-            # 2. Download from URL to temp file
-            response = requests.get(file_url, stream=True)
-            response.raise_for_status() # Check for errors
-            
-            with open(local_temp_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    f.write(chunk)
-
-            # 3. Fast Extraction (Standard PyPDFLoader reading the temp file)
-            print(f"Processing local temp file: {local_temp_path}")
-            loader = PyPDFLoader(local_temp_path)
-            pages = loader.load()
-            full_text = "\n\n".join([p.page_content for p in pages])
-
-            # 4. Splitting
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=CHUNK_SIZE,
-                chunk_overlap=CHUNK_OVERLAP
-            )
-
-            raw_docs = text_splitter.create_documents([full_text])
-            print(f"Created {len(raw_docs)} raw chunks.")
-
-            # --- METADATA INJECTION ---
-            for doc in raw_docs:
-                doc.metadata['source_document'] = filename
-                doc.metadata['space_id'] = space_id
-                doc.metadata['file_url'] = file_url
-                doc.metadata['db_id'] = db_id
-
-            # 5. Contextual Embedding (With Rate Limiting)
-            print("Generating Contextual Embeddings...")
-            print("Note: This will take time to respect Groq rate limits.")
-          
-            # Limit context to first 30k chars to avoid blowing up the prompt size
-            document_context_str = full_text[:30000]
-            contextualized_docs = []
-            
-            context_prompt = ChatPromptTemplate.from_template(
-                """<document>{doc_context}</document>
-                   Here is a chunk of text: <chunk>{chunk_content}</chunk>
-                   Briefly explain the context of this chunk within the document."""
-            )
-            chain = context_prompt | self.contextualizer_llm | StrOutputParser()
-            
-            # --- THE LOOP ---
-            for i, doc in enumerate(raw_docs):
-                
-                # A. Mandatory Sleep to prevent hitting 60 RPM limit
-                time.sleep(1.0) 
-
-                retries = 3
-                success = False
-                
-                while retries > 0 and not success:
-                    try:
-                        chunk_context = chain.invoke({
-                            "doc_context": document_context_str,
-                            "chunk_content": doc.page_content
-                        })
-                        combined_content = f"Context: {chunk_context}\n\nContent: {doc.page_content}"
-                        new_doc = Document(page_content=combined_content, metadata=doc.metadata)
-                        
-                        # Persist metadata
-                        new_doc.metadata['original_content'] = doc.page_content
-                        contextualized_docs.append(new_doc)
-                        
-                        # Progress bar effect
-                        print(f"Processed chunk {i + 1}/{len(raw_docs)}...", end='\r')
-                        success = True
-
-                    except Exception as e:
-                        error_msg = str(e)
-                        # Check for Rate Limit errors (429)
-                        if "429" in error_msg or "rate limit" in error_msg.lower():
-                            wait_time = 10 + random.randint(1, 5)
-                            print(f"\nRate Limit Hit on chunk {i}! Sleeping {wait_time}s...")
-                            time.sleep(wait_time)
-                            retries -= 1
-                        else:
-                            # If it's a different error (e.g., content filter), just skip context
-                            print(f"\nError on chunk {i}: {e}. Skipping context.")
-                            contextualized_docs.append(doc) # Fallback to raw doc
-                            success = True
-
-                # If we failed after 3 retries, just append the raw doc to avoid losing data
-                if not success:
-                     contextualized_docs.append(doc)
-
-            print(f"\nProcessing Complete. {len(contextualized_docs)} chunks ready.")
-            return contextualized_docs
-        except Exception as e:
-            print(f"Error processing {filename}: {e}")
-            return []
-            
-        finally:
-            # 6. Cleanup
-            if os.path.exists(local_temp_path):
-                try:
-                    os.remove(local_temp_path)
-                    print("Temp file cleaned up.")
-                except:
-                    pass
+        with self.index_lock:
+            return self.doc_processor.process_pdf(file_url, db_id, space_id)
                 
     def build_index(self, documents: List[Document]):
         with self.index_lock:
@@ -503,16 +317,15 @@ class AdvancedRAGSystem:
 
         chain = prompt | self.llm | StrOutputParser()
 
-        print(f"DEBUG: Invoking LLM with context length: {len(context_text)} chars")
+
         try:
             response_text = chain.invoke({
                 "context": context_text,
                 "question": user_query
             })
-            print(f"DEBUG: LLM response length: {len(response_text)} chars")
+
         except Exception as e:
-            print(f"ERROR in LLM call: {type(e).__name__}: {str(e)}")
-            print(f"ERROR details: {repr(e)}")
+
             return {
                 "answer": "An error occurred while generating the response.",
                 "source_document": top_source_filename,
