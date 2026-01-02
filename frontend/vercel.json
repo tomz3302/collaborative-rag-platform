@@ -1,8 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://builds-furnished-habitat-elder.trycloudflare.com/api/:path*" },
-    { "source": "/auth/:path*", "destination": "https://builds-furnished-habitat-elder.trycloudflare.com/auth/:path*" },
-    { "source": "/users/:path*", "destination": "https://builds-furnished-habitat-elder.trycloudflare.com/users/:path*" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

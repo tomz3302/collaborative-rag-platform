@@ -2,6 +2,9 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 
 const AuthContext = createContext();
 
+// Get base URL from environment variable
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 // Token expires after 4 hours (in milliseconds)
 const TOKEN_EXPIRY_MS = 4 * 60 * 60 * 1000;
 
@@ -69,7 +72,7 @@ export const AuthProvider = ({ children }) => {
     formData.append('username', email);
     formData.append('password', password);
 
-    const response = await fetch('/auth/jwt/login', {
+    const response = await fetch(`${API_BASE_URL}/auth/jwt/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: formData,
@@ -89,7 +92,7 @@ export const AuthProvider = ({ children }) => {
     localStorage.setItem('tokenExpiry', expiryTime.toString());
 
     // Fetch user info
-    const userResponse = await fetch('/users/me', {
+    const userResponse = await fetch(`${API_BASE_URL}/users/me`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
     });
 
@@ -111,7 +114,7 @@ export const AuthProvider = ({ children }) => {
 
   // Register function
   const register = async (email, password, fullName) => {
-    const response = await fetch('/auth/register', {
+    const response = await fetch(`${API_BASE_URL}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -134,7 +137,7 @@ export const AuthProvider = ({ children }) => {
 
   // Verify email function
   const verifyEmail = async (verificationToken) => {
-    const response = await fetch('/auth/verify', {
+    const response = await fetch(`${API_BASE_URL}/auth/verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: verificationToken }),

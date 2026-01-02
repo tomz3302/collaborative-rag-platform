@@ -3,6 +3,9 @@
  * Automatically attaches Bearer token to all requests
  */
 
+// Get base URL from environment variable
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
 // Get auth token from localStorage
 const getAuthToken = () => localStorage.getItem('token');
 
@@ -24,7 +27,7 @@ const handleAuthError = () => {
 
 /**
  * Authenticated fetch wrapper
- * @param {string} url - The URL to fetch
+ * @param {string} url - The URL to fetch (relative or absolute)
  * @param {RequestInit} options - Fetch options
  * @returns {Promise<Response>}
  */
@@ -36,6 +39,9 @@ export const apiFetch = async (url, options = {}) => {
     handleAuthError();
     throw new Error('Session expired');
   }
+  
+  // Build full URL (prepend base URL if url is relative)
+  const fullUrl = url.startsWith('http') ? url : `${API_BASE_URL}${url}`;
   
   // Build headers with auth token
   const headers = {
@@ -52,7 +58,7 @@ export const apiFetch = async (url, options = {}) => {
     headers['Content-Type'] = headers['Content-Type'] || 'application/json';
   }
   
-  const response = await fetch(url, {
+  const response = await fetch(fullUrl, {
     ...options,
     headers,
   });
