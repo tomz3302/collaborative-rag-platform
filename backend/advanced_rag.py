@@ -291,7 +291,7 @@ class AdvancedRAGSystem:
             "INSTRUCTIONS:\n"
             "1. **Core Accuracy**: Base your factual answer primarily on the provided CONTEXT below. "
             "Do not contradict the context.\n"
-            "2. **Elaboration & Depth**: Do not just summarize. Expand on the concepts mentioned in the context. "
+            "2. **Elaboration & Depth**: Do not just summarize. Expand on the concepts mentioned in the context whenever you see fit. "
             "Explain the 'Why' and 'How' behind the theories. If the context is brief, use your internal knowledge "
             "to provide the theoretical background.\n"
             "3. **Examples**: Provide concrete, real-world engineering examples or analogies to illustrate the points, whenever you see fits, "

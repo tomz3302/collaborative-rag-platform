@@ -15,7 +15,7 @@ CHUNK_SIZE = 800
 CHUNK_OVERLAP = 150
 # Threshold: 30k chars is roughly 7.5k tokens. 
 # Groq's Llama-3.3-70b free tier often has a 6k-30k TPM limit.
-CONTEXT_THRESHOLD_CHARS = 30000 
+CONTEXT_THRESHOLD_CHARS = 23000 
 
 class DocumentProcessorService:
     def __init__(self, contextualizer_llm):
@@ -49,8 +49,25 @@ class DocumentProcessorService:
             
             # 2. Decide Strategy based on Token/Char limit
             if len(full_text) <= CONTEXT_THRESHOLD_CHARS:
-                print(f"--- Strategy: Global Context (Size: {len(full_text)} chars) ---")
-                return self._process_with_global_context(raw_docs, full_text, filename, space_id, file_url, db_id)
+                # print(f"--- Strategy: Global Context (Size: {len(full_text)} chars) ---")
+                # return self._process_with_global_context(raw_docs, full_text, filename, space_id, file_url, db_id)
+                
+                # FALLBACK STRATEGY: No context injection for small documents to avoid 429 errors
+                print(f"--- Strategy: Skip Context Injection (Size: {len(full_text)} chars) ---")
+                contextualized_docs = []
+                for i, doc in enumerate(raw_docs):
+                    # We pass a simple indicator or empty string as context
+                    # This keeps your 'combined_content' format consistent for the DB
+                    new_doc = self._create_contextual_doc(
+                        doc, 
+                        "", 
+                        filename, 
+                        space_id,
+                        file_url, 
+                        db_id
+                    )
+                    contextualized_docs.append(new_doc)
+                return contextualized_docs
             else:
 
                 # print(f"--- Strategy: Sliding Window Placeholder (Size: {len(full_text)} chars) ---")
@@ -84,7 +101,7 @@ class DocumentProcessorService:
 
         for i, doc in enumerate(raw_docs):
             # Mandatory sleep for Groq Free Tier (adjust based on your specific TPM)
-            time.sleep(1.5) 
+            time.sleep(60) 
 
             retries = 3
             success = False

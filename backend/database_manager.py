@@ -178,7 +178,10 @@ class DBManager:
                 ORDER BY id ASC
             """
             cursor.execute(query, tuple(ancestor_ids))
-            return cursor.fetchall()
+            all_messages = cursor.fetchall()
+            
+            # Return only the last 6 messages
+            return all_messages[-6:] if len(all_messages) > 6 else all_messages
         finally:
             cursor.close()
             self.pool.putconn(conn)

@@ -66,7 +66,8 @@ class ChatController:
         )
 
         # 6. Post-Processing (Anchoring)
-        if source_doc:
+        # Only anchor if this is a new thread (thread_id was None initially)
+        if source_doc and thread_id is None:
             self.state_handler.anchor_thread_to_document(current_thread_id, source_doc, space_id)
 
         # 7. Return API Response
