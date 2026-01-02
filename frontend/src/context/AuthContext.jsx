@@ -2,8 +2,8 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 
 const AuthContext = createContext();
 
-// Token expires after 2 hours (in milliseconds)
-const TOKEN_EXPIRY_MS = 2 * 60 * 60 * 1000;
+// Token expires after 4 hours (in milliseconds)
+const TOKEN_EXPIRY_MS = 4 * 60 * 60 * 1000;
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);

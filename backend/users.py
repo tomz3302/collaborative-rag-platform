@@ -61,7 +61,7 @@ async def get_user_manager(user_db=Depends(get_user_db)):
 
 # JWT Configuration
 def get_jwt_strategy() -> JWTStrategy:
-    return JWTStrategy(secret=SECRET, lifetime_seconds=3600)
+    return JWTStrategy(secret=SECRET, lifetime_seconds=14400)  # Tokens valid for 4 hours
 
 auth_backend = AuthenticationBackend(
     name="jwt",
