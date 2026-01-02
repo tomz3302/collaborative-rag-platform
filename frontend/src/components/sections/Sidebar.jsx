@@ -55,10 +55,14 @@ export const Sidebar = ({
           </div>
 
           {/* Upload Button */}
-          <label className="mt-auto flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed cursor-pointer transition-colors border-gray-400 text-gray-500 hover:border-black hover:text-black hover:bg-white">
-              {isUploading ? <Loader2 className="animate-spin" size={16}/> : <Upload size={16} />}
+          <label 
+            className="mt-auto flex items-center justify-center gap-2 w-full py-3 border-2 border-dashed transition-colors border-gray-400 text-gray-400 bg-gray-50 cursor-not-allowed opacity-50"
+            title="only dardir can do this"
+          >
+              {/* {isUploading ? <Loader2 className="animate-spin" size={16}/> : <Upload size={16} />} */}
+              <Upload size={16} />
               <span className="text-sm font-bold hidden lg:block">UPLOAD_PDF</span>
-              <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} />
+              {/* <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} /> */}
           </label>
 
           {/* Exit Button */}

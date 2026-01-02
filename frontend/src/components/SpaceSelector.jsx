@@ -76,10 +76,12 @@ export default function SpaceSelector({ onSelectSpace }) {
 
         {/* CREATE NEW CARD */}
         <button
-          onClick={() => setIsCreating(true)}
-          className="group relative h-48 border-2 border-dashed border-gray-400 flex flex-col items-center justify-center gap-4 transition-all hover:border-black hover:bg-white hover:shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]"
+          // onClick={() => setIsCreating(true)}
+          disabled
+          title="only dardir can do this"
+          className="group relative h-48 border-2 border-dashed border-gray-400 flex flex-col items-center justify-center gap-4 transition-all bg-gray-50 cursor-not-allowed opacity-50"
         >
-          <div className="p-3 rounded-full bg-gray-100 group-hover:bg-black group-hover:text-white transition-colors">
+          <div className="p-3 rounded-full bg-gray-100 transition-colors">
             <Plus size={24} />
           </div>
           <span className="font-bold text-sm uppercase tracking-wider">Create New Space</span>
